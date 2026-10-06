@@ -254,3 +254,40 @@ def check_style_use(edit, style, explicit=True):
             raise AdsError(f"cảnh {sid}: 'punch' phải là số trong khoảng 1.0–1.5 (đang là {p!r})")
 
 
+# ---------------------------------------------------------------- dialogue ---
+DIALOGUE_MAX_WORDS = 15
+
+
+def check_dialogue(scenes):
+    """Lỗi nếu 'dialogue' của cảnh thiếu speaker/text hoặc quá DIALOGUE_MAX_WORDS từ."""
+    for s in scenes:
+        d = s.get("dialogue")
+        if d is None:
+            continue
+        sid = s.get("id", "?")
+        if not isinstance(d, dict) or not str(d.get("speaker", "")).strip() or not str(d.get("text", "")).strip():
+            raise AdsError(f"cảnh {sid}: 'dialogue' cần dạng {{\"speaker\": \"…\", \"text\": \"…\"}}")
+        n = len(str(d["text"]).split())
+        if n > DIALOGUE_MAX_WORDS:
+            raise AdsError(f"cảnh {sid}: thoại {n} từ — tối đa {DIALOGUE_MAX_WORDS} từ/clip (~4–5s); "
+                           "rút gọn hoặc tách cảnh")
+
+
+def dialogue_windows(scenes):
+    """[(start, end, scene_id, text)] của cảnh có thoại; scenes = timeline đã có start/end."""
+    return [(s["start"], s["end"], s["id"], s["dialogue"]["text"]) for s in scenes if s.get("dialogue")]
+
+
+def vo_dialogue_clash(spans, windows, tol=0.05):
+    """spans: [(start, end, file)] của VO → [(file, scene_id)] các VO chồng lên cảnh thoại."""
+    return [(f, sid) for a0, a1, f in spans for b0, b1, sid, _ in windows
+            if a0 < b1 - tol and b0 < a1 - tol]
+
+
+def timed_lines(vo_timed, windows):
+    """Câu VO [(t, text|None)] + thoại → [(t, text)] theo thời gian (nội dung .vo.txt / timeline 'lines')."""
+    items = [(t, txt) for t, txt in vo_timed if txt] + [(b0, txt) for b0, _, _, txt in windows]
+    return sorted(items, key=lambda x: x[0])
+
+
+

@@ -28,6 +28,7 @@ Mở rộng cho quảng cáo Thinking School (Muse-TS-ads):
   "style": "cinematic-drama"       → phong cách (styles/*.json): chặn chuyển cảnh/thoại trái luật, ghi vào timeline
   scene "punch": 1.2               → phóng to 1.0–1.5 lần để tạo shot cận hơn từ cùng clip
   transition "whip" / "zoompunch" / "flash" → lia nhanh nhoè (0,2s) / zoom giật (0,15s) / chớp trắng (0,12s)
+  scene "dialogue": {"speaker", "text"} → thoại do model tạo (≤ 15 từ); không VO đè; "dialogue_gain_db" (mặc định 0)
 """
 from __future__ import annotations
 
@@ -41,8 +42,9 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adslib import (ASPECTS, SAFE, AdsError, check_style_use, filter_version, load_brand,  # noqa: E402
-                    load_style, norm_block, resolve_transition)
+from adslib import (ASPECTS, SAFE, AdsError, check_dialogue, check_style_use, dialogue_windows,  # noqa: E402
+                    filter_version, load_brand, load_style, norm_block, resolve_transition,
+                    timed_lines, vo_dialogue_clash)
 
 
 # ASPECTS (9:16, 16:9, 1:1) và SAFE (vùng an toàn) định nghĩa ở adslib.py, dùng chung với brand_cards/qc.
@@ -145,7 +147,7 @@ def scene_vf(W, H, fps, punch=1.0):
     return vf + f"fps={fps},format=yuv420p"
 
 
-def normalize_scene(sc, idx, W, H, fps, work):
+def normalize_scene(sc, idx, W, H, fps, work, gain_db=0.0):
     out = os.path.join(work, f"seg_{idx:02d}.mkv")
     vf = scene_vf(W, H, fps, sc.get("punch", 1.0))
 
@@ -153,8 +155,10 @@ def normalize_scene(sc, idx, W, H, fps, work):
            "-ss", f"{sc['in']:.3f}", "-i", sc["path"]]
     if not sc["has_audio"]:
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+    af = ("aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
+          + (f",volume={db(gain_db)}" if gain_db else ""))
     cmd += ["-t", f"{sc['dur']:.3f}", "-map", "0:v:0", "-map", "0:a:0" if sc["has_audio"] else "1:a:0",
-            "-vf", vf, "-af", "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo",
+            "-vf", vf, "-af", af,
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "15", "-c:a", "pcm_s16le", out]
     run(cmd)
     return out
@@ -322,12 +326,22 @@ def render_video(segs, scenes, ass_file, total, work, logo=None):
 
 
 # ------------------------------------------------------------ step 4: mix ---
-def render_mix(edit, scenes_by_id, joined, total, work, warnings):
+def render_mix(edit, scenes_by_id, joined, total, work, warnings, windows=()):
     base = edit["_base"]
     inputs, parts, bed = ["-i", joined], [], []
     sfx = edit.get("sfx", {"keep": True, "gain_db": -12})
+    dlg = None
     if sfx.get("keep", True):
-        parts.append(f"[0:a]volume={db(sfx.get('gain_db', -12))}[sfx]")
+        parts.append(f"[0:a]volume={db(sfx.get('gain_db', -12))}[sfx_all]")
+        if windows:
+            # Tiếng gốc cảnh thoại tách riêng: không bị duck, và làm "chìa khoá" hạ nhạc như VO
+            en = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b, _, _ in windows)
+            parts.append("[sfx_all]asplit=2[sfx_a][dlg_a]")
+            parts.append(f"[sfx_a]volume=0:enable='{en}'[sfx]")
+            parts.append(f"[dlg_a]volume=0:enable='not({en})'[dlg]")
+            dlg = "[dlg]"
+        else:
+            parts.append("[sfx_all]anull[sfx]")
         bed.append("[sfx]")
     n = 1
     music = edit.get("music")
@@ -371,11 +385,15 @@ def render_mix(edit, scenes_by_id, joined, total, work, warnings):
         if b0 < a1 - 0.05:
             raise SystemExit(f"VO CHỒNG NHAU: {fa} ({a0:.2f}–{a1:.2f}s) và {fb} ({b0:.2f}–{b1:.2f}s). "
                              "Dời mốc hoặc rút gọn câu.")
+    for f, sid in vo_dialogue_clash(spans, windows):
+        raise SystemExit(f"VO TRÙNG THOẠI: {f} chồng lên cảnh thoại '{sid}' — dời VO sang cảnh khác "
+                         "hoặc bỏ VO ở cảnh có thoại.")
     for a0, a1, f in spans:
         if a1 > total - 0.3:
             warnings.append(f"VO {f} kết thúc {a1:.2f}s, sát/vượt cuối phim {total:.2f}s")
 
-    if not bed and not vo_labels:
+    keys = vo_labels + ([dlg] if dlg else [])
+    if not bed and not keys:
         raise SystemExit("Không có lớp âm thanh nào (sfx tắt, không nhạc, không VO)")
     if len(bed) > 1:
         parts.append(f"{''.join(bed)}amix=inputs={len(bed)}:normalize=0:duration=longest[bed]")
@@ -384,11 +402,11 @@ def render_mix(edit, scenes_by_id, joined, total, work, warnings):
         bed_l = bed[0] if bed else None
 
     duck = edit.get("duck", {})
-    if vo_labels:
-        if len(vo_labels) > 1:
-            parts.append(f"{''.join(vo_labels)}amix=inputs={len(vo_labels)}:normalize=0:duration=longest[vo]")
+    if keys:
+        if len(keys) > 1:
+            parts.append(f"{''.join(keys)}amix=inputs={len(keys)}:normalize=0:duration=longest[vo]")
         else:
-            parts.append(f"{vo_labels[0]}anull[vo]")
+            parts.append(f"{keys[0]}anull[vo]")
         if bed_l:
             parts.append("[vo]asplit=2[vo_sc][vo_mix]")
             parts.append(
@@ -441,6 +459,9 @@ def prepare(edit):
         edit = filter_version(edit, edit["version"])
     style = load_style(edit.get("style"))
     check_style_use(edit, style, explicit=bool(edit.get("style")))
+    check_dialogue(edit.get("scenes", []))
+    if any(s.get("dialogue") for s in edit.get("scenes", [])) and not edit.get("sfx", {}).get("keep", True):
+        raise AdsError("có cảnh thoại nhưng sfx.keep = false — thoại nằm trong tiếng gốc clip nên phải giữ sfx")
     return edit, style
 
 
@@ -470,14 +491,18 @@ def render_one(edit, style, a):
     work = tempfile.mkdtemp(prefix="assemble_")
     try:
         print("1/5 Chuẩn hóa cảnh…")
-        segs = [normalize_scene(s, i, W, H, fps, work) for i, s in enumerate(scenes)]
+        sfx_gain = float(edit.get("sfx", {}).get("gain_db", -12))
+        boost = float(edit.get("dialogue_gain_db", 0)) - sfx_gain  # cảnh thoại về đúng dialogue_gain_db
+        segs = [normalize_scene(s, i, W, H, fps, work, gain_db=boost if s.get("dialogue") else 0.0)
+                for i, s in enumerate(scenes)]
         print("2/5 Overlay chữ…")
         ass = build_ass(edit, by_id, W, H, aspect, total, work, warnings)
         print("3/5 Nối cảnh + chuyển cảnh…")
         logo = logo_spec(edit, scenes, W, H, aspect)
         joined = render_video(segs, scenes, ass, total, work, logo)
+        windows = dialogue_windows(scenes)
         print("4/5 Mix âm thanh 3 lớp + ducking…")
-        mix, spans = render_mix(edit, by_id, joined, total, work, warnings)
+        mix, spans = render_mix(edit, by_id, joined, total, work, warnings, windows)
         print("5/5 Chuẩn hóa loudness + xuất file…")
         m = measure_loudness(mix, L)
         ln = (f"loudnorm=I={L['I']}:TP={L['TP']}:LRA={L['LRA']}:measured_I={m['input_i']}:"
@@ -488,19 +513,22 @@ def render_one(edit, style, a):
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", joined, "-i", mix,
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-af", ln, "-c:a", "aac", "-b:a", "192k",
              "-ar", "48000", "-t", f"{total:.3f}", "-movflags", "+faststart", out])
+        lines = timed_lines([(resolve_time(v, by_id, f"vo #{i+1}"), v.get("text"))
+                             for i, v in enumerate(edit.get("vo", []))], windows)
         timeline = {"aspect": aspect, "fps": fps, "total": total, "version": edit.get("version"),
                     "style": style["id"], "hook_min_shots": style["hook_min_shots"],
-                    "scenes": [{k: s[k] for k in ("id", "start", "end", "dur", "block")} for s in scenes],
+                    "scenes": [dict({k: s[k] for k in ("id", "start", "end", "dur", "block")},
+                                    dialogue=(s["dialogue"] or {}).get("text")) for s in scenes],
                     "vo": [{"file": f, "start": round(s0, 3), "end": round(s1, 3)} for s0, s1, f in spans],
+                    "lines": [{"start": round(t, 3), "text": txt} for t, txt in lines],
                     "warnings": warnings}
         with open(os.path.splitext(out)[0] + ".timeline.json", "w", encoding="utf-8") as f:
             json.dump(timeline, f, ensure_ascii=False, indent=2)
-        vo_texts = [v["text"] for v in edit.get("vo", []) if v.get("text")]
         script_path = None
-        if vo_texts:
+        if lines:
             script_path = os.path.splitext(out)[0] + ".vo.txt"
             with open(script_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(vo_texts) + "\n")
+                f.write("\n".join(txt for _, txt in lines) + "\n")
         print(f"\n✔ Xuất xong: {out}")
         for w in warnings:
             print(f"  ⚠ {w}")
