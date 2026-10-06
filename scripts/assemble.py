@@ -29,6 +29,9 @@ Mở rộng cho quảng cáo Thinking School (Muse-TS-ads):
   scene "punch": 1.2               → phóng to 1.0–1.5 lần để tạo shot cận hơn từ cùng clip
   transition "whip" / "zoompunch" / "flash" → lia nhanh nhoè (0,2s) / zoom giật (0,15s) / chớp trắng (0,12s)
   scene "dialogue": {"speaker", "text"} → thoại do model tạo (≤ 15 từ); không VO đè; "dialogue_gain_db" (mặc định 0)
+  "hook_variants": [{"id": "A", "type": "in-medias-res", "scenes": […HOOK…], "vo": […], "overlays": […]}, …]
+                                   → dựng 1 file/bản hook: <output>_hookA.mp4, _hookB… (1–5 bản)
+  assemble.py edit.json --hook B   → chỉ dựng bản hook B
 """
 from __future__ import annotations
 
@@ -42,9 +45,10 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adslib import (ASPECTS, SAFE, AdsError, check_dialogue, check_style_use, dialogue_windows,  # noqa: E402
-                    filter_version, load_brand, load_style, norm_block, resolve_transition,
-                    timed_lines, vo_dialogue_clash)
+from adslib import (ASPECTS, SAFE, AdsError, apply_hook_variant, check_dialogue,  # noqa: E402
+                    check_style_use, dialogue_windows, filter_version, load_brand, load_style,
+                    norm_block, resolve_transition, timed_lines, validate_hook_variants,
+                    variant_output, vo_dialogue_clash)
 
 
 # ASPECTS (9:16, 16:9, 1:1) và SAFE (vùng an toàn) định nghĩa ở adslib.py, dùng chung với brand_cards/qc.
@@ -517,6 +521,7 @@ def render_one(edit, style, a):
                              for i, v in enumerate(edit.get("vo", []))], windows)
         timeline = {"aspect": aspect, "fps": fps, "total": total, "version": edit.get("version"),
                     "style": style["id"], "hook_min_shots": style["hook_min_shots"],
+                    "hook_variant": edit.get("hook_variant"),
                     "scenes": [dict({k: s[k] for k in ("id", "start", "end", "dur", "block")},
                                     dialogue=(s["dialogue"] or {}).get("text")) for s in scenes],
                     "vo": [{"file": f, "start": round(s0, 3), "end": round(s1, 3)} for s0, s1, f in spans],
@@ -554,11 +559,21 @@ def main():
     ap.add_argument("edit")
     ap.add_argument("--plan", action="store_true", help="chỉ in timeline, không render")
     ap.add_argument("--keep-work", action="store_true", help="giữ thư mục tạm để debug")
+    ap.add_argument("--hook", help="chỉ dựng 1 bản hook (id trong hook_variants)")
     a = ap.parse_args()
     try:
         edit = load_edit(a.edit)
-        e, style = prepare(edit)
-        render_one(e, style, a)
+        variants = validate_hook_variants(edit)
+        if a.hook:
+            variants = [v for v in variants if str(v["id"]) == a.hook]
+            if not variants:
+                raise AdsError(f"không có hook '{a.hook}' trong hook_variants")
+        jobs = [apply_hook_variant(edit, v) for v in variants] or [edit]
+        for job in jobs:
+            if job.get("hook_variant"):
+                job["output"] = variant_output(edit.get("output", "final.mp4"), job["hook_variant"]["id"])
+            e, style = prepare(job)
+            render_one(e, style, a)
     except AdsError as ex:
         sys.exit(f"Lỗi edit.json: {ex}")
 

@@ -290,4 +290,80 @@ def timed_lines(vo_timed, windows):
     return sorted(items, key=lambda x: x[0])
 
 
+# ----------------------------------------------------------- hook variants ---
+HOOK_VARIANTS_MAX = 5
+_VARIANT_ID = re.compile(r"^[A-Za-z0-9]{1,8}$")
+
+
+def validate_hook_variants(edit):
+    """Kiểm tra edit['hook_variants'] (nếu có). Trả về danh sách bản hook ([] nếu không khai báo)."""
+    hv = edit.get("hook_variants")
+    if hv is None:
+        return []
+    if not isinstance(hv, list) or not 1 <= len(hv) <= HOOK_VARIANTS_MAX:
+        raise AdsError(f"hook_variants cần 1–{HOOK_VARIANTS_MAX} bản")
+    seen = set()
+    for i, v in enumerate(hv, 1):
+        vid = str(v.get("id", ""))
+        if not _VARIANT_ID.match(vid):
+            raise AdsError(f"hook_variants #{i}: 'id' chỉ gồm chữ/số không dấu, 1–8 ký tự (vd A, B, C) — "
+                           f"đang là '{vid}'")
+        if vid in seen:
+            raise AdsError(f"hook_variants: trùng id '{vid}'")
+        seen.add(vid)
+        if v.get("type") not in HOOK_TYPES:
+            raise AdsError(f"hook {vid}: 'type' phải thuộc thư viện hook: {', '.join(HOOK_TYPES)}")
+        scenes = v.get("scenes") or []
+        if not scenes:
+            raise AdsError(f"hook {vid}: cần ít nhất 1 cảnh")
+        for s in scenes:
+            if "id" not in s:
+                raise AdsError(f"hook {vid}: mọi cảnh cần 'id'")
+            if not s.get("block") or norm_block(s["block"]) != "HOOK":
+                raise AdsError(f"hook {vid}: cảnh {s['id']} phải có \"block\": \"HOOK\"")
+        own = sorted(s["id"] for s in scenes)
+        for key in ("vo", "overlays"):
+            for j, it in enumerate(v.get(key, []), 1):
+                if it.get("scene") not in own:
+                    raise AdsError(f"hook {vid}: {key} #{j} phải gắn 'scene' vào cảnh của chính bản hook "
+                                   f"({', '.join(own)})")
+    return hv
+
+
+def apply_hook_variant(edit, variant):
+    """Edit mới: các cảnh HOOK ở đầu master (và VO/overlay gắn vào chúng) được thay bằng bản hook."""
+    e = copy.deepcopy(edit)
+    e.pop("hook_variants", None)
+    scenes = e.get("scenes", [])
+    hook_ids = {s.get("id") for s in scenes if s.get("block") and norm_block(s["block"]) == "HOOK"}
+    if not hook_ids:
+        raise AdsError("hook_variants cần master có cảnh block HOOK để thay")
+    n = 0
+    while n < len(scenes) and scenes[n].get("id") in hook_ids:
+        n += 1
+    if n != len(hook_ids):
+        raise AdsError("các cảnh HOOK của master phải nằm liền nhau ở đầu phim")
+    for key in ("vo", "overlays"):
+        for j, it in enumerate(e.get(key, []), 1):
+            if "scene" not in it:
+                raise AdsError(f"{key} #{j} dùng mốc 'at' tuyệt đối — khi có hook_variants phải dùng "
+                               "'scene' + 'offset'")
+    v = copy.deepcopy(variant)
+    clash = {s.get("id") for s in scenes[n:]} & {s["id"] for s in v["scenes"]}
+    if clash:
+        raise AdsError(f"hook {v['id']}: id cảnh trùng với master: {', '.join(sorted(clash))}")
+    e["scenes"] = v["scenes"] + scenes[n:]
+    for key in ("vo", "overlays"):
+        kept = [it for it in e.get(key, []) if it["scene"] not in hook_ids]
+        e[key] = v.get(key, []) + kept
+    e["hook_variant"] = {"id": str(v["id"]), "type": v["type"]}
+    return e
+
+
+def variant_output(output, vid):
+    root, ext = os.path.splitext(output)
+    return f"{root}_hook{vid}{ext or '.mp4'}"
+
+
+
 

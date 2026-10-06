@@ -8,6 +8,7 @@
 Bản cắt giữ các cảnh có block nằm trong kế hoạch (adslib.CUT_PLANS hoặc "cutdowns" trong
 edit.json), theo thứ tự master; giữ VO/overlay gắn với các cảnh đó; áp "versions" và "trim".
 Cảnh báo nếu thời lượng ước tính lệch quá ±1.5s so với đích.
+Có "hook_variants" → giữ nguyên trong edit_30/edit_15; assemble.py dựng đủ các bản hook cho từng bản cắt.
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from adslib import (TOLERANCE, AdsError, estimate_duration, norm_block, output_name,  # noqa: E402
-                    select_blocks)
+                    select_blocks, validate_hook_variants)
 
 
 def probe_duration(path):
@@ -33,6 +34,7 @@ def probe_duration(path):
 
 def make_cut(edit, version, durations):
     """(edit bản cắt, thời lượng ước tính, cảnh báo). durations: {file: giây} cho cảnh thiếu 'out'."""
+    validate_hook_variants(edit)
     e = select_blocks(edit, version)
     est = estimate_duration(e["scenes"], durations)
     warnings = []
