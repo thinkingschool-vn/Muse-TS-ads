@@ -1,0 +1,36 @@
+{
+  "aspect": "9:16",
+  "fps": 24,
+  "version": "60",
+  "brand": "../../brand/brand.json",
+  "output": "out/ts-thinking-uni-9x16-60s.mp4",
+  "logo_bug": {"logo": "on_dark", "corner": "tr"},
+  "scenes": [
+    {"id": "hook", "file": "media/c1.mp4", "in": 0, "out": 5, "block": "HOOK", "trim": {"15": {"out": 4}}},
+    {"id": "pain", "file": "media/c1.mp4", "in": 5, "out": 10, "block": "VẤN ĐỀ"},
+    {"id": "logo", "file": "cards/logo.mp4", "block": "THƯƠNG HIỆU", "transition": {"type": "fade", "duration": 0.4}},
+    {"id": "brand", "file": "media/c2.mp4", "out": 8, "block": "THƯƠNG HIỆU", "trim": {"30": {"out": 6}, "15": {"out": 5}}},
+    {"id": "b1", "file": "media/c3.mp4", "out": 10, "block": "LỢI ÍCH-1"},
+    {"id": "b2", "file": "media/c4.mp4", "out": 10, "block": "LỢI ÍCH-2"},
+    {"id": "b3", "file": "media/c5.mp4", "out": 8, "block": "LỢI ÍCH-3"},
+    {"id": "proof", "file": "media/c6.mp4", "out": 5, "block": "BẰNG CHỨNG"},
+    {"id": "offer", "file": "cards/price.mp4", "block": "ƯU ĐÃI"},
+    {"id": "end", "file": "cards/end.mp4", "block": "CTA"}
+  ],
+  "music": {"file": "media/music.wav", "gain_db": -8, "fade_out": 2.0},
+  "sfx": {"keep": false},
+  "vo": [
+    {"file": "media/vo_01.wav", "scene": "hook", "offset": 0.3},
+    {"file": "media/vo_02.wav", "scene": "pain", "offset": 0.2},
+    {"file": "media/vo_03.wav", "scene": "brand", "offset": 0.2},
+    {"file": "media/vo_04.wav", "scene": "b1", "offset": 0.2},
+    {"file": "media/vo_05.wav", "scene": "b2", "offset": 0.2},
+    {"file": "media/vo_06.wav", "scene": "end", "offset": 0.2}
+  ],
+  "overlays": [
+    {"text": "Tri thức có rào cản?", "style": "title", "scene": "hook", "offset": 0.2, "duration": 2.5, "y": 0.2},
+    {"text": "THINK — Tư duy sâu", "style": "title", "scene": "b1", "offset": 0.5, "duration": 3, "y": 0.2},
+    {"text": "WORK & LEARN — Kỹ năng số", "style": "title", "scene": "b2", "offset": 0.5, "duration": 3, "y": 0.2},
+    {"text": "CONTRIBUTE — Vì cộng đồng", "style": "title", "scene": "b3", "offset": 2.6, "duration": 3, "y": 0.2}
+  ]
+}

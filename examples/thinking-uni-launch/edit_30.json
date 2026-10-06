@@ -1,0 +1,99 @@
+{
+  "aspect": "9:16",
+  "fps": 24,
+  "version": "30",
+  "brand": "../../brand/brand.json",
+  "output": "out/ts-thinking-uni-9x16-30s.mp4",
+  "logo_bug": {
+    "logo": "on_dark",
+    "corner": "tr"
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "file": "media/c1.mp4",
+      "in": 0,
+      "out": 5,
+      "block": "HOOK"
+    },
+    {
+      "id": "logo",
+      "file": "cards/logo.mp4",
+      "block": "THƯƠNG HIỆU",
+      "transition": {
+        "type": "fade",
+        "duration": 0.4
+      }
+    },
+    {
+      "id": "brand",
+      "file": "media/c2.mp4",
+      "out": 6,
+      "block": "THƯƠNG HIỆU"
+    },
+    {
+      "id": "b1",
+      "file": "media/c3.mp4",
+      "out": 10,
+      "block": "LỢI ÍCH-1"
+    },
+    {
+      "id": "offer",
+      "file": "cards/price.mp4",
+      "block": "ƯU ĐÃI"
+    },
+    {
+      "id": "end",
+      "file": "cards/end.mp4",
+      "block": "CTA"
+    }
+  ],
+  "music": {
+    "file": "media/music.wav",
+    "gain_db": -8,
+    "fade_out": 2.0
+  },
+  "sfx": {
+    "keep": false
+  },
+  "vo": [
+    {
+      "file": "media/vo_01.wav",
+      "scene": "hook",
+      "offset": 0.3
+    },
+    {
+      "file": "media/vo_03.wav",
+      "scene": "brand",
+      "offset": 0.2
+    },
+    {
+      "file": "media/vo_04.wav",
+      "scene": "b1",
+      "offset": 0.2
+    },
+    {
+      "file": "media/vo_06.wav",
+      "scene": "end",
+      "offset": 0.2
+    }
+  ],
+  "overlays": [
+    {
+      "text": "Tri thức có rào cản?",
+      "style": "title",
+      "scene": "hook",
+      "offset": 0.2,
+      "duration": 2.5,
+      "y": 0.2
+    },
+    {
+      "text": "THINK — Tư duy sâu",
+      "style": "title",
+      "scene": "b1",
+      "offset": 0.5,
+      "duration": 3,
+      "y": 0.2
+    }
+  ]
+}

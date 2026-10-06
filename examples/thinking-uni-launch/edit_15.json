@@ -1,0 +1,75 @@
+{
+  "aspect": "9:16",
+  "fps": 24,
+  "version": "15",
+  "brand": "../../brand/brand.json",
+  "output": "out/ts-thinking-uni-9x16-15s.mp4",
+  "logo_bug": {
+    "logo": "on_dark",
+    "corner": "tr"
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "file": "media/c1.mp4",
+      "in": 0,
+      "out": 4,
+      "block": "HOOK"
+    },
+    {
+      "id": "logo",
+      "file": "cards/logo.mp4",
+      "block": "THƯƠNG HIỆU",
+      "transition": {
+        "type": "fade",
+        "duration": 0.4
+      }
+    },
+    {
+      "id": "brand",
+      "file": "media/c2.mp4",
+      "out": 5,
+      "block": "THƯƠNG HIỆU"
+    },
+    {
+      "id": "end",
+      "file": "cards/end.mp4",
+      "block": "CTA"
+    }
+  ],
+  "music": {
+    "file": "media/music.wav",
+    "gain_db": -8,
+    "fade_out": 2.0
+  },
+  "sfx": {
+    "keep": false
+  },
+  "vo": [
+    {
+      "file": "media/vo_01.wav",
+      "scene": "hook",
+      "offset": 0.3
+    },
+    {
+      "file": "media/vo_03.wav",
+      "scene": "brand",
+      "offset": 0.2
+    },
+    {
+      "file": "media/vo_06.wav",
+      "scene": "end",
+      "offset": 0.2
+    }
+  ],
+  "overlays": [
+    {
+      "text": "Tri thức có rào cản?",
+      "style": "title",
+      "scene": "hook",
+      "offset": 0.2,
+      "duration": 2.5,
+      "y": 0.2
+    }
+  ]
+}
