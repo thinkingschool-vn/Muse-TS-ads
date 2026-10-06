@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.superpowers/
+qc_*/
+*.mp4
+examples/**/media/
+examples/**/out/
+examples/**/cards/
