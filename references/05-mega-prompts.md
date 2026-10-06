@@ -70,3 +70,21 @@ Kiểm tra từng động từ: "ngoài đời nó xảy ra như vậy không?" 
 - TEXT BAN mở rộng: không "Thinking School", "Thinking Uni", "MBA", giá, ngày, URL, QR, logo trong prompt. Màn hình/hologram: "abstract glowing shapes, no text, no letters, no numbers, no UI labels".
 - Không tả nhân vật bằng tên hay tuổi dạng số ("Linh 24" từng bị vẽ thành chữ trong hình).
 - Kết prompt bằng AUDIO RULES (SFX only) như trên.
+
+## Bổ sung: phong cách + thoại (v2)
+**Khối phong cách** — dán ngay sau GLOBAL LOCKS của mọi prompt:
+```powershell
+python scripts/styles.py prompt <id>
+```
+Style lock trong GLOBAL LOCKS thay bằng dòng `STYLE:` này (không dùng 2 mô tả look khác nhau). CAMERA của từng cảnh chọn **1** chuyển động trong `CAMERA ALLOWED`.
+
+**Clip có thoại** (chỉ `cinematic-drama`, `micro-drama`) — thay AUDIO RULES bằng:
+```
+DIALOGUE: <mô tả ngoại hình ngắn, cảm xúc> says in Vietnamese, spoken aloud only: "<câu nguyên văn ≤ 15 từ>"
+AUDIO RULES: only this character speaks; no other voices; no music; no narration; room tone + SFX only.
+No subtitles, no captions, no on-screen text of the spoken line.
+```
+- 1 người nói/clip; trung cảnh hoặc cận vừa; máy tĩnh hoặc dolly-in chậm (khẩu hình rõ).
+- Tên nhân vật **không** đưa vào DIALOGUE (model có thể vẽ thành chữ) — tả ngoại hình.
+- Câu thoại chép y hệt vào `edit.json` → scene `"dialogue": {"speaker": "...", "text": "..."}` để QC nghe lại.
+- Clip không thoại vẫn dùng AUDIO RULES cũ (No dialogue).

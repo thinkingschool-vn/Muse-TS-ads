@@ -4,7 +4,7 @@ Mục tiêu: một file `BRIEF.md` chứa **mọi sự thật** sẽ xuất hi�
 Không có trong BRIEF = không được nói, không được hiện trong quảng cáo.
 
 ## 1. Thu thập
-1. Hỏi user: link + tỷ lệ + độ dài master + nền tảng (SKILL.md, Giai đoạn 0).
+1. Hỏi user: link + tỷ lệ + độ dài master + nền tảng + **phong cách** (SKILL.md, Giai đoạn 0; bảng chọn ở `references/11-styles-and-hooks.md`).
 2. Đọc trang khoá học (đọc URL hoặc mở trình duyệt). Cần thông tin thương hiệu (số khoá học, số học viên, mô hình học 5 phút/bài) thì đọc trang chủ `app.thinkingschool.vn` — **đọc lại mỗi lần**, số liệu trên web thay đổi.
 3. Điền `templates/BRIEF.md`. Mỗi trường ghi nguồn: `(nguồn: <url>)` hoặc `(user xác nhận <ngày>)`.
 4. Trường không tìm thấy → `⚠ cần xác nhận`. Gom **tất cả** trường ⚠ vào **một** tin nhắn, đánh số, kèm gợi ý mặc định nếu hợp lý.

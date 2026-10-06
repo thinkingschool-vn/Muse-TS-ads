@@ -14,12 +14,18 @@ Từ **link khoá học** → 3 video quảng cáo hoạt hình cùng tỷ lệ 
 ## Dùng trên Muse AI
 Nạp thư mục này làm skill; mở đầu bằng: *"Làm video quảng cáo cho khoá <link>, tỷ lệ 9:16"*. Muse đi theo `SKILL.md`: BRIEF → kịch bản block → nhân vật → âm thanh → keyframe → video → thẻ thương hiệu → dựng + cắt → QC.
 
+## Phong cách + hook 3 giây (v2)
+- `python scripts/styles.py list` — 4 phong cách: `warm-3d` (mặc định), `cinematic-drama`, `micro-drama`, `motion-graphics`.
+- `edit.json`: `"style"`, `"hook_variants"` (3 bản A/B/C → 3 file `_hookA/B/C`), cảnh `"punch"`, `"dialogue"`, chuyển cảnh `whip` / `zoompunch` / `flash`.
+- `qc.py final --ad` có thêm mục **Hook:** (cắt cảnh đầu, số shot, khung hình 0, chữ, âm thanh, thương hiệu) và kiểm tra thoại.
+- Chi tiết: `references/11-styles-and-hooks.md`.
+
 ## Cấu trúc
 ```
 SKILL.md        quy trình điều phối
 brand/          brand.json, logo, QR Zalo, font, LEXICON (cách đọc), BRAND_GUIDE (luật nội dung)
-references/     00-brief … 10-lessons
-scripts/        brand_cards.py · assemble.py · cutdown.py · qc.py · adslib.py · vi_numbers.py
+references/     00-brief … 11-styles-and-hooks
+scripts/        styles.py · brand_cards.py · assemble.py · cutdown.py · qc.py · adslib.py · vi_numbers.py
 templates/      BRIEF.md · AD_COPY.md · edit.example.json
 examples/       thinking-uni-launch (chạy thử end-to-end)
 tests/          pytest

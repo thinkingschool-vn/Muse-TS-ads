@@ -9,6 +9,8 @@
 | Bản master | 60s (tự cắt 30s + 15s) |
 | Nền tảng | Reels / TikTok / Shorts / Facebook feed / YouTube |
 | Slug file | vd `thinking-uni` → `ts-thinking-uni-9x16-60s.mp4` |
+| Phong cách | warm-3d / cinematic-drama / micro-drama / motion-graphics (`python scripts/styles.py list`) |
+| Số bản hook A/B | 3 (1–5) |
 
 ## Sản phẩm
 | Trường | Giá trị | Nguồn |

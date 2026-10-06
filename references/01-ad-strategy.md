@@ -17,7 +17,8 @@
 - "Lên quản lý rồi, ai dạy bạn cách quản lý?" → Master Series theo cấp bậc.
 - "Muốn học kiến thức đại học chuẩn quốc tế nhưng vướng học phí?" → Thinking Uni.
 
-Luật hook: 3 giây đầu có hình mạnh + chữ hook; nói thẳng nỗi đau của persona; không mở bằng logo hay cảnh tối, chậm.
+Luật hook: theo 8 luật ở `references/11-styles-and-hooks.md` (khung 0 có chuyển động, cắt cảnh đầu ≤ 2,5s, chữ + tiếng trong 3s, thương hiệu trong 5s).
+**Viết 3 bản HOOK (A/B/C)** khác loại — lấy từ `hook_types` của phong cách (`python scripts/styles.py show <id>`). Ghi trong SCRIPT.md là các dòng `1A`, `1B`, `1C`; phần thân dùng chung. Phong cách drama: dựng theo khung micro-drama (mục 4 của reference 11).
 Chỉ dùng tính năng có trong BRIEF.
 
 ## 3. Kịch bản theo BLOCK
@@ -49,7 +50,7 @@ Mỗi dòng kịch bản thuộc đúng 1 block: `HOOK · VẤN ĐỀ · THƯƠN
 | 9b | CTA | 5 | (end card) | Thinking Uni ra mắt 11/10 — đăng ký ngay. | Thinking Uni ra mắt mười một tháng mười, đăng ký ngay. | (thẻ) | 15 |
 
 ## 4. Nhịp, âm thanh, chữ
-- Shot 2–5s; mỗi 3–5s có thay đổi thị giác (cut, cỡ cảnh, overlay mới, chuyển động máy).
+- Độ dài shot theo `shot_len` của phong cách (drama 1–4s, motion 0,8–2,5s, 3D ấm 3–10s); mỗi 3–5s có thay đổi thị giác (cut, cỡ cảnh, overlay mới, chuyển động máy).
 - VO phủ 70–85% thời lượng; khoảng lặng dài nhất ≤ 3s. CTA là 1 câu riêng, ~3,5 âm tiết/giây, `gain_db` +1 đến +2.
 - Overlay ≤ 6–7 chữ/thẻ, hiện ≥ 0,8s + 0,3s × số chữ, không đè mặt, không đặt trên đoạn flash.
 - Tên thương hiệu nghe + thấy trước giây 12 (60s) hoặc giây 6 (30s/15s).

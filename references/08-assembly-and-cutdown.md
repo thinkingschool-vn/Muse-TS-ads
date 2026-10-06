@@ -51,6 +51,7 @@ python scripts/qc.py final final/phim.mp4 --aspect 9:16 --duration 60 --script v
 | Thông báo | Sửa |
 |---|---|
 | `VO CHỒNG NHAU` | Dời `offset`, rút gọn câu, hoặc kéo dài cảnh |
+| `VO TRÙNG THOẠI` | Bỏ/dời VO khỏi cảnh có thoại |
 | `out vượt độ dài clip` | Kiểm tra lại thời lượng clip bằng ffprobe |
 | Chữ thiếu dấu / sai font | Khai báo `font.file` + `font.name` đúng tên family |
 | `No such filter: 'ass'` | ffmpeg thiếu libass → cài bản full |
@@ -71,6 +72,11 @@ python scripts/qc.py final final/phim.mp4 --aspect 9:16 --duration 60 --script v
 | `"logo_bug": {"logo": "on_dark", "corner": "tr"}` | logo góc; ẩn ở THƯƠNG HIỆU/ƯU ĐÃI/CTA (đổi bằng `skip_blocks`) |
 | vo `"text"` | chữ đã đọc → `<output>.vo.txt` cho `qc.py --script` |
 | `"aspect": "1:1"` | 720×720 (ngoài 9:16 và 16:9) |
+| `"style": "cinematic-drama"` | phong cách (`styles/*.json`): chặn chuyển cảnh/thoại trái luật; QC hook đọc số shot tối thiểu |
+| scene `"punch": 1.3` | phóng to 1.0–1.5 lần → shot cận hơn từ cùng clip (tạo nhịp hook mà không generate thêm) |
+| `"transition": "whip"` / `"zoompunch"` / `"flash"` | lia nhoè 0,2s / zoom giật 0,15s / chớp trắng 0,12s (làm lúc dựng, không bắt AI làm) |
+| scene `"dialogue": {"speaker", "text"}` | cảnh thoại do model tạo (≤ 15 từ); không VO đè (`VO TRÙNG THOẠI`); `"dialogue_gain_db"` mặc định 0 |
+| `"hook_variants": [...]` | 1–5 bản hook; mỗi bản `id` (chữ/số), `type`, `scenes` (block HOOK), `vo`, `overlays` gắn cảnh của chính bản đó |
 
 VO/overlay **phải** gắn `scene` + `offset` (không dùng `at`), nếu không cutdown.py báo lỗi. Mẫu: `templates/edit.example.json`.
 
@@ -78,9 +84,11 @@ VO/overlay **phải** gắn `scene` + `offset` (không dùng `at`), nếu không
 ```powershell
 python scripts/assemble.py edit.json --plan     # timeline + block từng cảnh
 python scripts/assemble.py edit.json            # master
+python scripts/assemble.py edit.json --hook B   # chỉ dựng bản hook B
 python scripts/cutdown.py edit.json             # edit_30.json + edit_15.json + ước tính thời lượng
 python scripts/cutdown.py edit.json --render    # tạo + dựng luôn 2 bản cắt
 ```
+Có `hook_variants` → mỗi bản ra 1 file `…-60s_hookA.mp4`, `_hookB`…; cutdown giữ nguyên hook_variants nên bản 30/15 cũng đủ các bản hook.
 Mặc định: 30s = HOOK → THƯƠNG HIỆU → LỢI ÍCH-1 → ƯU ĐÃI → CTA; 15s = HOOK → THƯƠNG HIỆU → CTA.
 Lệch > ±1,5s → chỉnh `trim` (cắt cảnh AI, không cắt thẻ) rồi chạy lại. VO chồng nhau sau trim → assemble.py dừng; rút `out` ít hơn hoặc dùng câu VO riêng cho bản ngắn.
 
