@@ -14,8 +14,13 @@ Lệnh:
 
   qc.py final <final.mp4> [--aspect 9:16] [--script vo.txt] [--target-lufs -14]
              [--expect-match-cuts] [--out qc_final]
+             [--ad --duration 30] [--end-card cards/end.mp4] [--must-say "mười một tháng mười"]...
       Kiểm tra file phim cuối: định dạng, loudness, khoảng lặng, flash/khung đen,
       mối nối (SSIM), và (tùy chọn) đối chiếu lời đọc với kịch bản VO.
+      --ad: thời lượng phải nằm trong [đích − 1,5 ; đích + 0,5]s, cảnh cuối phải là block CTA
+      ≥ 3,5s, cảnh đầu nên là HOOK (đọc <video>.timeline.json do assemble.py ghi).
+      --must-say: cụm thông tin bắt buộc (giá, ngày…) phải nghe được trong VO và có trong --script.
+      QC_NO_WHISPER=1: tắt nhận dạng giọng nói.
 
 Mã thoát: 0 = PASS, 1 = có lỗi FAIL, 2 = lỗi sử dụng.
 Báo cáo được ghi ra <out>/qc_report.md + qc_report.json + ảnh ghép mối nối.
@@ -33,7 +38,12 @@ import sys
 import tempfile
 import unicodedata
 
-ASPECTS = {"9:16": (720, 1280), "16:9": (1280, 720)}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from adslib import ASPECTS  # noqa: E402  (9:16, 16:9, 1:1)
+from vi_numbers import normalize_numbers  # noqa: E402
+
+SYNONYMS = {"ngàn": "nghìn", "lẻ": "linh", "tỉ": "tỷ"}
+AD_END_MIN = 3.5  # end card (block CTA) cuối phim tối thiểu bao nhiêu giây
 
 # Ngưỡng SSIM ở mối nối (ảnh xám 360px; hiệu chỉnh trên clip Thinking Uni):
 #   >= MATCH_OK   : match-cut đạt (gần như trùng khung)
@@ -220,6 +230,8 @@ def luma_events(src, fps_sample=12, cuts=()):
 
 def transcribe(src):
     """Trả về list (start, end, text) hoặc None nếu chưa cài faster-whisper."""
+    if os.environ.get("QC_NO_WHISPER"):
+        return None
     try:
         from faster_whisper import WhisperModel  # type: ignore
     except ImportError:
@@ -234,8 +246,10 @@ def transcribe(src):
 
 def norm_text(s):
     s = unicodedata.normalize("NFC", s.lower())
+    s = normalize_numbers(s)
     s = re.sub(r"[^\w\s]", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    return " ".join(SYNONYMS.get(w, w) for w in s.split())
 
 
 def script_coverage(script_lines, segments):
@@ -356,12 +370,42 @@ def cmd_final(a):
             f"{info['width']}×{info['height']} (chuẩn {w}×{h})")
     rep.add(PASS if info["fps"] and abs(info["fps"] - a.fps) < 0.01 else WARN, "FPS", f"{info['fps']}")
     rep.add(PASS if info["has_audio"] else FAIL, "Có audio", str(info["has_audio"]))
-    if a.duration:
+    if a.duration and a.ad:
+        d = info["duration"]
+        ok = a.duration - 1.5 <= d <= a.duration + 0.5
+        rep.add(PASS if ok else FAIL, "Thời lượng quảng cáo",
+                f"{d:.2f}s (bản {a.duration:g}s cho phép {a.duration - 1.5:.1f}–{a.duration + 0.5:.1f}s)")
+    elif a.duration:
         diff = abs(info["duration"] - a.duration)
         rep.add(PASS if diff <= 2 else WARN, "Thời lượng", f"{info['duration']:.2f}s (mục tiêu {a.duration}s)")
     else:
         rep.add(PASS, "Thời lượng", f"{info['duration']:.2f}s")
 
+    tl_path = os.path.splitext(a.video)[0] + ".timeline.json"
+    if os.path.exists(tl_path):
+        with open(tl_path, encoding="utf-8") as f:
+            tl = json.load(f)
+        for w_ in tl.get("warnings", []):
+            rep.add(WARN, "Cảnh báo lúc dựng", w_)
+        if a.ad:
+            sc = tl.get("scenes", [])
+            last, first = (sc[-1] if sc else {}), (sc[0] if sc else {})
+            ok = last.get("block") == "CTA" and last.get("dur", 0) >= AD_END_MIN
+            rep.add(PASS if ok else FAIL, "End card cuối phim",
+                    f"cảnh cuối {last.get('id')} [{last.get('block')}] {last.get('dur', 0):.2f}s "
+                    f"(cần block CTA ≥ {AD_END_MIN}s)")
+            rep.add(PASS if first.get("block") == "HOOK" else WARN, "Mở đầu bằng HOOK",
+                    f"cảnh đầu {first.get('id')} [{first.get('block')}]")
+    elif a.ad:
+        rep.add(WARN, "Timeline", f"không thấy {os.path.basename(tl_path)} → không kiểm tra được block/end card")
+    if a.end_card:
+        fdir = os.path.join(a.out, "frames")
+        os.makedirs(fdir, exist_ok=True)
+        fa = extract_frame(a.video, 0, os.path.join(fdir, "final_last.jpg"), from_end=True)
+        fb = extract_frame(a.end_card, 0, os.path.join(fdir, "endcard_last.jpg"), from_end=True)
+        sc_ = ssim(fa, fb)
+        rep.add(PASS if sc_ is not None and sc_ >= MATCH_OK else FAIL, "End card khớp file thẻ",
+                f"SSIM {sc_:.2f}" if sc_ is not None else "không đo được")
     extra = {}
     if info["has_audio"]:
         L = loudness(a.video)
@@ -401,12 +445,14 @@ def cmd_final(a):
     if not cuts:
         rep.add(PASS, "Mối nối", "không phát hiện cut cứng (dùng chuyển cảnh mềm)")
 
+    lines = []
     if a.script:
         with open(a.script, encoding="utf-8-sig") as f:
             lines = [l.strip() for l in f if l.strip() and not l.lstrip().startswith("#")]
-        segs = transcribe(a.video)
+    segs = transcribe(a.video) if (a.script or a.must_say) else None
+    if a.script:
         if segs is None:
-            rep.add(WARN, "Độ rõ lời VO", "chưa cài faster-whisper (pip install faster-whisper) → nghe thủ công")
+            rep.add(WARN, "Độ rõ lời VO", "chưa có faster-whisper (hoặc QC_NO_WHISPER) → nghe thủ công")
         else:
             extra["transcript"] = [{"start": s, "end": e, "text": t} for s, e, t in segs]
             for line, score in script_coverage(lines, segs):
@@ -420,6 +466,17 @@ def cmd_final(a):
                     if unknown > 0.6:
                         rep.add(FAIL, "Lời lạ ngoài kịch bản",
                                 f"{s:.1f}–{e:.1f}s: “{t[:80]}” → có thể do tiếng gốc của clip; tắt/hạ sfx")
+    script_norm = norm_text(" ".join(lines)) if a.script else None
+    for phrase in a.must_say:
+        if script_norm is not None and norm_text(phrase) not in script_norm:
+            rep.add(FAIL, "Kịch bản thiếu thông tin bắt buộc",
+                    f"“{phrase}” không có trong {os.path.basename(a.script)}")
+        if segs is None:
+            rep.add(WARN, "Thông tin bắt buộc trong VO", f"“{phrase}” — chưa có whisper → nghe thủ công")
+        else:
+            res = script_coverage([phrase], segs)
+            score = res[0][1] if res else 0.0
+            rep.add(PASS if score >= 0.6 else FAIL, "Thông tin bắt buộc trong VO", f"{score:.2f} — “{phrase}”")
     rep.write(a.out, extra)
     return 1 if rep.verdict == FAIL else 0
 
@@ -449,6 +506,9 @@ def main():
     p.add_argument("--target-lufs", type=float, default=-14.0)
     p.add_argument("--script", help="file text: mỗi dòng 1 câu VO đúng như kịch bản")
     p.add_argument("--expect-match-cuts", action="store_true")
+    p.add_argument("--ad", action="store_true", help="kiểm tra luật quảng cáo (thời lượng chặt, end card, HOOK)")
+    p.add_argument("--end-card", help="file thẻ end card để so khớp frame cuối")
+    p.add_argument("--must-say", action="append", default=[], help="cụm thông tin bắt buộc trong VO (lặp lại được)")
     p.add_argument("--out", default="qc_final")
     p.set_defaults(fn=cmd_final)
 
