@@ -1,0 +1,28 @@
+{
+  "name": "Thinking School",
+  "tagline": "Hệ Điều Hành Tư Duy & Quản Trị",
+  "colors": {
+    "primary": "#0064FF",
+    "violet": "#8B5CF6",
+    "indigo": "#4F46E5",
+    "accent": "#F59E0B",
+    "bg_dark": "#0B1020",
+    "bg_dark2": "#1E1B4B",
+    "text": "#FFFFFF",
+    "muted": "#AEB8D6"
+  },
+  "font": {"name": "Be Vietnam Pro", "file": "fonts/BeVietnamPro-Bold.ttf"},
+  "logo": {"on_light": "logo-on-light.png", "on_dark": "logo-on-dark.png"},
+  "qr": "zalo-qr.png",
+  "contact": {
+    "hotline": "0909 00 64 09",
+    "email": "info@thinkingschool.vn",
+    "website": "app.thinkingschool.vn"
+  },
+  "styles": {
+    "title": {"color": "#FFFFFF", "outline_color": "#0B1020"},
+    "cta": {"color": "#F59E0B", "outline_color": "#0B1020"},
+    "brand": {"color": "#FFFFFF", "outline_color": "#0064FF"}
+  },
+  "source": "Lấy từ app.thinkingschool.vn ngày 2026-10-06 — cần duyệt và thay bằng file logo gốc (SVG/PNG lớn) nếu có."
+}

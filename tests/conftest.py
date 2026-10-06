@@ -26,7 +26,7 @@ def probe(path):
                        stdout=subprocess.PIPE, text=True, check=True)
     d = json.loads(p.stdout)
     v = next(s for s in d["streams"] if s["codec_type"] == "video")
-    return {"width": v["width"], "height": v["height"], "duration": float(d["format"]["duration"]),
+    return {"width": v["width"], "height": v["height"], "duration": float(d["format"].get("duration", 0) or 0),
             "has_audio": any(s["codec_type"] == "audio" for s in d["streams"])}
 
 
