@@ -52,6 +52,9 @@ AD_END_MIN = 3.5  # end card (block CTA) cuối phim tối thiểu bao nhiêu gi
 # Đây là heuristic: luôn mở ảnh ghép boundaries.jpg để nhìn tận mắt.
 MATCH_OK = 0.75
 CUT_CLEAN = 0.25
+# Khung gần như trơn (YHIGH − YLOW < FLAT_SPREAD, thang 8-bit) — vd frame đầu thẻ thương hiệu đang
+# fade-in (đo được 8–13) so với cảnh phim (≥ 170). SSIM với khung trơn không phân biệt được jump cut.
+FLAT_SPREAD = 24
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 
@@ -112,11 +115,29 @@ def ssim(img_a, img_b):
     return float(m.group(1)) if m else None
 
 
-def classify_boundary(score, expect_match):
+def frame_spread(img):
+    """Độ trải độ sáng YHIGH − YLOW (thang 8-bit) của 1 ảnh; nhỏ = khung gần như trơn."""
+    p = run(["ffmpeg", "-hide_banner", "-i", img, "-vf", "scale=360:-2,signalstats,metadata=print",
+             "-f", "null", "-"], check=False)
+    lo = re.search(r"YLOW=([\d.]+)", p.stderr)
+    hi = re.search(r"YHIGH=([\d.]+)", p.stderr)
+    return float(hi.group(1)) - float(lo.group(1)) if lo and hi else None
+
+
+def is_flat_pair(img_a, img_b):
+    sp = [frame_spread(x) for x in (img_a, img_b)]
+    return any(s is not None and s < FLAT_SPREAD for s in sp)
+
+
+def classify_boundary(score, expect_match, flat=False):
     if score is None:
         return WARN, "không đo được"
     if score >= MATCH_OK:
         return PASS, "match-cut khớp"
+    if flat:
+        if expect_match:
+            return FAIL, "đã định match-cut nhưng 1 khung gần như trơn"
+        return PASS, "cắt sang khung gần như trơn (thẻ/fade) — SSIM không áp dụng"
     if score < CUT_CLEAN:
         if expect_match:
             return FAIL, "đã định match-cut nhưng 2 khung khác hẳn"
@@ -351,7 +372,7 @@ def cmd_clips(a):
         fa = extract_frame(a.clips[i], 0, os.path.join(tmp, f"c{i+1}_last.jpg"), from_end=True)
         fb = extract_frame(a.clips[i + 1], 0, os.path.join(tmp, f"c{i+2}_first.jpg"))
         sc = ssim(fa, fb)
-        st, why = classify_boundary(sc, a.expect_match_cuts)
+        st, why = classify_boundary(sc, a.expect_match_cuts, flat=is_flat_pair(fa, fb))
         rep.add(st, f"Mối nối C{i+1}→C{i+2}", f"SSIM {sc:.2f} — {why}" if sc is not None else why)
         pairs.append((fa, fb))
     if pairs:
@@ -436,7 +457,7 @@ def cmd_final(a):
         fa = extract_frame(a.video, max(0, t - 2 * frame), os.path.join(tmp, f"cut{i}_a.jpg"))
         fb = extract_frame(a.video, t + frame, os.path.join(tmp, f"cut{i}_b.jpg"))
         sc = ssim(fa, fb)
-        st, why = classify_boundary(sc, a.expect_match_cuts)
+        st, why = classify_boundary(sc, a.expect_match_cuts, flat=is_flat_pair(fa, fb))
         rep.add(st, f"Mối nối @ {t:.2f}s", f"SSIM {sc:.2f} — {why}" if sc is not None else why)
         pairs.append((fa, fb))
     if pairs:

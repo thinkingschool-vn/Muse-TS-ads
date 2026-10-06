@@ -46,6 +46,22 @@ def test_norm_text_is_number_aware():
     assert qc.norm_text("1.200.000đ") == qc.norm_text("một triệu hai trăm ngàn đồng")
 
 
+def test_cut_into_flat_frame_is_not_jump_cut():
+    import qc
+    assert qc.classify_boundary(0.40, False)[0] == "FAIL"
+    assert qc.classify_boundary(0.40, False, flat=True)[0] == "PASS"
+    assert qc.classify_boundary(0.10, True, flat=True)[0] == "FAIL"  # định match-cut vẫn phải khớp
+
+
+@needs_ffmpeg
+def test_frame_spread_detects_flat_card_frame(tmp_path):
+    import qc
+    flat, busy = str(tmp_path / "flat.png"), str(tmp_path / "busy.png")
+    for src, out in (("color=c=0x1E1B4B:s=360x640", flat), ("testsrc2=s=360x640", busy)):
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", src, "-frames:v", "1", out], check=True)
+    assert qc.frame_spread(flat) < qc.FLAT_SPREAD <= qc.frame_spread(busy)
+
+
 @needs_ffmpeg
 def test_ad_checks_pass(ad, tmp_path):
     d, video, card = ad
