@@ -25,6 +25,9 @@ Mở rộng cho quảng cáo Thinking School (Muse-TS-ads):
   scene "block": "HOOK" …          → nhãn block (bắt buộc cho MỌI cảnh nếu có dùng)
   "logo_bug": {"logo": "on_dark", "corner": "tr"} → logo góc, ẩn ở block THƯƠNG HIỆU/ƯU ĐÃI/CTA
   vo "text": "…"                   → ghi <output>.vo.txt để qc.py --script
+  "style": "cinematic-drama"       → phong cách (styles/*.json): chặn chuyển cảnh/thoại trái luật, ghi vào timeline
+  scene "punch": 1.2               → phóng to 1.0–1.5 lần để tạo shot cận hơn từ cùng clip
+  transition "whip" / "zoompunch" / "flash" → lia nhanh nhoè (0,2s) / zoom giật (0,15s) / chớp trắng (0,12s)
 """
 from __future__ import annotations
 
@@ -38,7 +41,9 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adslib import ASPECTS, SAFE, AdsError, filter_version, load_brand, norm_block  # noqa: E402
+from adslib import (ASPECTS, SAFE, AdsError, check_style_use, filter_version, load_brand,  # noqa: E402
+                    load_style, norm_block, resolve_transition)
+
 
 # ASPECTS (9:16, 16:9, 1:1) và SAFE (vùng an toàn) định nghĩa ở adslib.py, dùng chung với brand_cards/qc.
 LOGO_SKIP_DEFAULT = ["THƯƠNG HIỆU", "ƯU ĐÃI", "CTA"]  # thẻ thương hiệu đã có logo to → ẩn logo góc
@@ -87,13 +92,7 @@ def ass_escape(text):
 
 # --------------------------------------------------------------- timeline ---
 def trans_of(scene):
-    t = scene.get("transition", "cut")
-    if isinstance(t, str):
-        t = {"type": t}
-    t = dict(t)
-    t.setdefault("type", "cut")
-    t["duration"] = 0.0 if t["type"] == "cut" else float(t.get("duration", 0.4))
-    return t
+    return resolve_transition(scene.get("transition", "cut"))
 
 
 def build_timeline(edit, base):
@@ -115,7 +114,8 @@ def build_timeline(edit, base):
             start -= scenes[-1]["trans"]["duration"]
         sc = {"id": s.get("id", f"s{i+1}"), "path": path, "in": t_in, "dur": dur,
               "start": round(start, 3), "end": round(start + dur, 3), "trans": trans_of(s),
-              "has_audio": info["has_audio"], "block": norm_block(s["block"]) if s.get("block") else None}
+              "has_audio": info["has_audio"], "block": norm_block(s["block"]) if s.get("block") else None,
+              "punch": float(s.get("punch", 1.0)), "dialogue": s.get("dialogue")}
         if i < len(edit["scenes"]) - 1 and sc["trans"]["duration"] >= dur:
             raise SystemExit(f"Cảnh {sc['id']}: chuyển cảnh dài hơn cảnh")
         scenes.append(sc)
@@ -138,10 +138,17 @@ def resolve_time(item, scenes_by_id, label):
 
 
 # ------------------------------------------------------------- step 1: seg ---
+def scene_vf(W, H, fps, punch=1.0):
+    vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
+    if punch and punch > 1.0:  # phóng to rồi cắt giữa → shot cận hơn từ cùng clip
+        vf += f"scale=trunc(iw*{punch:.3f}/2)*2:trunc(ih*{punch:.3f}/2)*2,crop={W}:{H},setsar=1,"
+    return vf + f"fps={fps},format=yuv420p"
+
+
 def normalize_scene(sc, idx, W, H, fps, work):
     out = os.path.join(work, f"seg_{idx:02d}.mkv")
-    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
-          f"fps={fps},format=yuv420p")
+    vf = scene_vf(W, H, fps, sc.get("punch", 1.0))
+
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
            "-ss", f"{sc['in']:.3f}", "-i", sc["path"]]
     if not sc["has_audio"]:
@@ -291,7 +298,7 @@ def render_video(segs, scenes, ass_file, total, work, logo=None):
             length += scenes[i]["dur"]
         else:
             d = t["duration"]
-            parts.append(f"[{cur_v}][v{i}]xfade=transition={t['type']}:duration={d:.3f}:"
+            parts.append(f"[{cur_v}][v{i}]xfade=transition={t['xfade']}:duration={d:.3f}:"
                          f"offset={length - d:.3f},settb=AVTB[{nv}]")
             parts.append(f"[{cur_a}][a{i}]acrossfade=d={d:.3f}:c1=tri:c2=tri[{na}]")
             length += scenes[i]["dur"] - d
@@ -412,53 +419,52 @@ def measure_loudness(wav, L):
 
 
 # ------------------------------------------------------------------- main ---
-def main():
-    for t in ("ffmpeg", "ffprobe"):
-        if not shutil.which(t):
-            sys.exit(f"Thiếu {t} trong PATH.")
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("edit")
-    ap.add_argument("--plan", action="store_true", help="chỉ in timeline, không render")
-    ap.add_argument("--keep-work", action="store_true", help="giữ thư mục tạm để debug")
-    a = ap.parse_args()
-
-    with open(a.edit, encoding="utf-8-sig") as f:
+def load_edit(path):
+    with open(path, encoding="utf-8-sig") as f:
         edit = json.load(f)
-    base = os.path.dirname(os.path.abspath(a.edit))
+    base = os.path.dirname(os.path.abspath(path))
     edit["_base"] = base
-    try:
-        if edit.get("brand"):
-            brand = load_brand(os.path.join(base, edit["brand"]))
-            edit.setdefault("font", {"name": brand["font"]["name"], "file": brand["font"]["file"]})
-            styles = {k: dict(v) for k, v in brand.get("styles", {}).items()}
-            for k, v in edit.get("styles", {}).items():
-                styles.setdefault(k, {}).update(v)
-            edit["styles"] = styles
-            edit["_brand"] = brand
-        if edit.get("version") is not None:
-            edit = filter_version(edit, edit["version"])
-    except AdsError as e:
-        sys.exit(f"Lỗi edit.json: {e}")
+    if edit.get("brand"):
+        brand = load_brand(os.path.join(base, edit["brand"]))
+        edit.setdefault("font", {"name": brand["font"]["name"], "file": brand["font"]["file"]})
+        styles = {k: dict(v) for k, v in brand.get("styles", {}).items()}
+        for k, v in edit.get("styles", {}).items():
+            styles.setdefault(k, {}).update(v)
+        edit["styles"] = styles  # "styles" = kiểu chữ overlay; "style" = phong cách video
+        edit["_brand"] = brand
+    return edit
+
+
+def prepare(edit):
+    """Áp bản (version) + kiểm tra luật phong cách → (edit, style). Lỗi dữ liệu → AdsError."""
+    if edit.get("version") is not None:
+        edit = filter_version(edit, edit["version"])
+    style = load_style(edit.get("style"))
+    check_style_use(edit, style, explicit=bool(edit.get("style")))
+    return edit, style
+
+
+def render_one(edit, style, a):
+    """Dựng 1 file. Trả về đường dẫn output (None nếu --plan)."""
+    base = edit["_base"]
     aspect = edit.get("aspect", "9:16")
     if aspect not in ASPECTS:
-        sys.exit(f"aspect phải là một trong {list(ASPECTS)}")
+        raise AdsError(f"aspect phải là một trong {list(ASPECTS)}")
     W, H = ASPECTS[aspect]
     fps = int(edit.get("fps", 24))
     L = {"I": -14.0, "TP": -1.5, "LRA": 11.0, **edit.get("loudness", {})}
-
-    try:
-        scenes, total = build_timeline(edit, base)
-    except AdsError as e:
-        sys.exit(f"Lỗi edit.json: {e}")
+    scenes, total = build_timeline(edit, base)
     by_id = {s["id"]: s for s in scenes}
-    print(f"TIMELINE ({aspect}, {W}×{H}, {fps}fps) — tổng {total:.2f}s")
+    out = os.path.normpath(os.path.join(base, edit.get("output", "final.mp4")))
+    print(f"TIMELINE {os.path.basename(out)} ({aspect}, {W}×{H}, {fps}fps, phong cách {style['id']}) "
+          f"— tổng {total:.2f}s")
     for s in scenes:
         tr = s["trans"]
         tr_s = "" if tr["type"] == "cut" else f"  → {tr['type']} {tr['duration']:.2f}s"
         blk = f"  [{s['block']}]" if s["block"] else ""
         print(f"  {s['id']:<8} {s['start']:7.2f} → {s['end']:7.2f}  ({s['dur']:.2f}s){tr_s}{blk}")
     if a.plan:
-        return
+        return None
 
     warnings = []
     work = tempfile.mkdtemp(prefix="assemble_")
@@ -468,7 +474,8 @@ def main():
         print("2/5 Overlay chữ…")
         ass = build_ass(edit, by_id, W, H, aspect, total, work, warnings)
         print("3/5 Nối cảnh + chuyển cảnh…")
-        joined = render_video(segs, scenes, ass, total, work, logo_spec(edit, scenes, W, H, aspect))
+        logo = logo_spec(edit, scenes, W, H, aspect)
+        joined = render_video(segs, scenes, ass, total, work, logo)
         print("4/5 Mix âm thanh 3 lớp + ducking…")
         mix, spans = render_mix(edit, by_id, joined, total, work, warnings)
         print("5/5 Chuẩn hóa loudness + xuất file…")
@@ -477,12 +484,12 @@ def main():
               f"measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
               f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true,"
               f"aresample=48000")
-        out = os.path.normpath(os.path.join(base, edit.get("output", "final.mp4")))
         os.makedirs(os.path.dirname(out), exist_ok=True)
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", joined, "-i", mix,
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-af", ln, "-c:a", "aac", "-b:a", "192k",
              "-ar", "48000", "-t", f"{total:.3f}", "-movflags", "+faststart", out])
         timeline = {"aspect": aspect, "fps": fps, "total": total, "version": edit.get("version"),
+                    "style": style["id"], "hook_min_shots": style["hook_min_shots"],
                     "scenes": [{k: s[k] for k in ("id", "start", "end", "dur", "block")} for s in scenes],
                     "vo": [{"file": f, "start": round(s0, 3), "end": round(s1, 3)} for s0, s1, f in spans],
                     "warnings": warnings}
@@ -503,11 +510,29 @@ def main():
         if script_path:
             cmd += f" --script {os.path.basename(script_path)}"
         print("→ Bước tiếp theo bắt buộc:", cmd)
+        return out
     finally:
         if a.keep_work:
             print(f"(thư mục tạm: {work})")
         else:
             shutil.rmtree(work, ignore_errors=True)
+
+
+def main():
+    for t in ("ffmpeg", "ffprobe"):
+        if not shutil.which(t):
+            sys.exit(f"Thiếu {t} trong PATH.")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("edit")
+    ap.add_argument("--plan", action="store_true", help="chỉ in timeline, không render")
+    ap.add_argument("--keep-work", action="store_true", help="giữ thư mục tạm để debug")
+    a = ap.parse_args()
+    try:
+        edit = load_edit(a.edit)
+        e, style = prepare(edit)
+        render_one(e, style, a)
+    except AdsError as ex:
+        sys.exit(f"Lỗi edit.json: {ex}")
 
 
 if __name__ == "__main__":

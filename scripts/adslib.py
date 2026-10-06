@@ -136,11 +136,25 @@ def select_blocks(edit, version, plan=None):
     return _drop_orphans(e)
 
 
+# Chuyển cảnh: tên trong edit.json → (tên xfade của ffmpeg, độ dài mặc định giây).
+# Tên khác "cut" và không có ở đây được chuyển thẳng cho xfade (fade, dissolve, wipeleft…), mặc định 0,4s.
+TRANSITION_ALIASES = {"whip": ("hblur", 0.2), "zoompunch": ("zoomin", 0.15), "flash": ("fadewhite", 0.12)}
+
+
+def resolve_transition(t):
+    """'whip' | {"type": "whip", "duration": 0.3} | None → {"type", "xfade", "duration"}."""
+    if t is None or isinstance(t, str):
+        t = {"type": t or "cut"}
+    t = dict(t)
+    name = t.get("type", "cut")
+    if name == "cut":
+        return {"type": "cut", "xfade": None, "duration": 0.0}
+    xf, d = TRANSITION_ALIASES.get(name, (name, 0.4))
+    return {"type": name, "xfade": xf, "duration": float(t.get("duration", d))}
+
+
 def trans_duration(scene):
-    t = scene.get("transition", "cut")
-    if isinstance(t, str):
-        t = {"type": t}
-    return 0.0 if t.get("type", "cut") == "cut" else float(t.get("duration", 0.4))
+    return resolve_transition(scene.get("transition", "cut"))["duration"]
 
 
 def estimate_duration(scenes, durations):
@@ -218,4 +232,25 @@ def style_prompt_block(style):
         "CAMERA FORBIDDEN: " + "; ".join(style["camera_forbidden"]) + ".",
         "HUMANS: stylized 3D characters, never photoreal humans.",
     ])
+
+
+def check_style_use(edit, style, explicit=True):
+    """Lỗi nếu edit.json dùng chuyển cảnh/thoại/punch trái luật phong cách.
+
+    explicit=False (edit.json không ghi "style"): không chặn tên chuyển cảnh — giữ tương thích bản cũ.
+    """
+    for s in edit.get("scenes", []):
+        sid = s.get("id", "?")
+        if explicit:
+            name = resolve_transition(s.get("transition", "cut"))["type"]
+            if name not in style["transitions"]:
+                raise AdsError(f"cảnh {sid}: chuyển cảnh '{name}' không thuộc phong cách {style['id']} — "
+                               f"dùng: {', '.join(style['transitions'])}")
+        if s.get("dialogue") and not style["dialogue"]:
+            raise AdsError(f"cảnh {sid} có thoại nhưng phong cách {style['id']} không cho thoại — "
+                           "đổi sang cinematic-drama / micro-drama hoặc bỏ 'dialogue'")
+        p = s.get("punch")
+        if p is not None and (isinstance(p, bool) or not isinstance(p, (int, float)) or not 1.0 <= p <= 1.5):
+            raise AdsError(f"cảnh {sid}: 'punch' phải là số trong khoảng 1.0–1.5 (đang là {p!r})")
+
 

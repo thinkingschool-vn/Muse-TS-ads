@@ -79,3 +79,13 @@ _MASTER = {
 def master_edit():
     """Edit master 60s mẫu (60.0s sau khi trừ fade 0.4s); bản 30 = 29.5s, bản 15 = 15.0s."""
     return copy.deepcopy(_MASTER)
+
+
+def run_assemble(edit, d, *extra):
+    """Ghi edit.json vào thư mục d rồi chạy assemble.py; trả về CompletedProcess."""
+    p = d / "edit.json"
+    p.write_text(json.dumps(edit, ensure_ascii=False), encoding="utf-8")
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    return subprocess.run([sys.executable, os.path.join(SCRIPTS, "assemble.py"), str(p), *extra],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+
