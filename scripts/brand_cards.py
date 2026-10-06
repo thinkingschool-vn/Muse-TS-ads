@@ -23,7 +23,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from adslib import ASPECTS, SAFE, AdsError, load_brand  # noqa: E402
+from adslib import ASPECTS, SAFE, AdsError, configure_utf8_console, load_brand  # noqa: E402
 
 DEFAULT_BRAND = os.path.normpath(os.path.join(HERE, "..", "brand", "brand.json"))
 DEFAULT_DUR = {"logo_sting": 1.4, "price_card": 3.0, "end_card": 4.5}
@@ -252,6 +252,7 @@ def render_card(kind, aspect, fields, brand, out, duration=None, fps=24):
 
 
 def main():
+    configure_utf8_console()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("kind", choices=list(LAYOUTS))
     ap.add_argument("--aspect", choices=list(ASPECTS), required=True)

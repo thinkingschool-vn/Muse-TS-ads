@@ -11,7 +11,18 @@ import copy
 import json
 import os
 import re
+import sys
 import unicodedata
+
+
+def configure_utf8_console():
+    """Đảm bảo console Windows in ký tự UTF-8 không bị lỗi UnicodeEncodeError."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
 
 ASPECTS = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (720, 720)}
 

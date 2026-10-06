@@ -6,7 +6,7 @@ import sys
 import pytest
 
 from conftest import SCRIPTS
-from adslib import AdsError, list_styles, load_style, style_prompt_block
+from adslib import AdsError, configure_utf8_console, list_styles, load_style, style_prompt_block
 
 
 def test_four_styles_load():
@@ -98,3 +98,12 @@ def test_cli_list_show_prompt():
     assert r.stdout.strip() == style_prompt_block(load_style("motion-graphics"))
     r = run_cli("show", "nope")
     assert r.returncode != 0 and "không có phong cách" in r.stderr
+
+
+def test_configure_utf8_console():
+    configure_utf8_console()
+    env = dict(os.environ)
+    env.pop("PYTHONIOENCODING", None)
+    r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "styles.py"), "list"],
+                       capture_output=True, text=True, encoding="utf-8", env=env)
+    assert r.returncode == 0 and "warm-3d" in r.stdout

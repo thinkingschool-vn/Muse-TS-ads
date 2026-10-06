@@ -42,7 +42,7 @@ import tempfile
 import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adslib import ASPECTS  # noqa: E402  (9:16, 16:9, 1:1)
+from adslib import ASPECTS, configure_utf8_console  # noqa: E402  (9:16, 16:9, 1:1)
 from vi_numbers import normalize_numbers  # noqa: E402
 
 SYNONYMS = {"ngàn": "nghìn", "lẻ": "linh", "tỉ": "tỷ"}
@@ -625,6 +625,7 @@ def cmd_final(a):
 
 
 def main():
+    configure_utf8_console()
     need_tools()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)

@@ -20,8 +20,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from adslib import (TOLERANCE, AdsError, estimate_duration, norm_block, output_name,  # noqa: E402
-                    select_blocks, validate_hook_variants)
+from adslib import (TOLERANCE, AdsError, configure_utf8_console, estimate_duration, norm_block,  # noqa: E402
+                    output_name, select_blocks, validate_hook_variants)
 
 
 def probe_duration(path):
@@ -46,6 +46,7 @@ def make_cut(edit, version, durations):
 
 
 def main():
+    configure_utf8_console()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("edit")
     ap.add_argument("--to", nargs="+", default=["30", "15"], help="các bản cần cắt (giây)")

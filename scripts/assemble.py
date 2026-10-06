@@ -46,9 +46,9 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adslib import (ASPECTS, SAFE, AdsError, apply_hook_variant, check_dialogue,  # noqa: E402
-                    check_style_use, dialogue_windows, filter_version, load_brand, load_style,
-                    norm_block, resolve_transition, timed_lines, validate_hook_variants,
-                    variant_output, vo_dialogue_clash)
+                    check_style_use, configure_utf8_console, dialogue_windows, filter_version,
+                    load_brand, load_style, norm_block, resolve_transition, timed_lines,
+                    validate_hook_variants, variant_output, vo_dialogue_clash)
 
 
 # ASPECTS (9:16, 16:9, 1:1) và SAFE (vùng an toàn) định nghĩa ở adslib.py, dùng chung với brand_cards/qc.
@@ -346,16 +346,16 @@ def render_mix(edit, scenes_by_id, joined, total, work, warnings, windows=()):
     sfx = edit.get("sfx", {"keep": True, "gain_db": -12})
     dlg = None
     if sfx.get("keep", True):
-        parts.append(f"[0:a]volume={db(sfx.get('gain_db', -12))}[sfx_all]")
         if windows:
             # Tiếng gốc cảnh thoại tách riêng: không bị duck, và làm "chìa khoá" hạ nhạc như VO
             en = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b, _, _ in windows)
-            parts.append("[sfx_all]asplit=2[sfx_a][dlg_a]")
-            parts.append(f"[sfx_a]volume=0:enable='{en}'[sfx]")
-            parts.append(f"[dlg_a]volume=0:enable='not({en})'[dlg]")
+            parts.append("[0:a]asplit=2[sfx_raw][dlg_raw]")
+            parts.append(f"[sfx_raw]volume={db(sfx.get('gain_db', -12))},volume=0:enable='{en}'[sfx]")
+            dlg_gain = float(edit.get("dialogue_gain_db", 0))
+            parts.append(f"[dlg_raw]volume={db(dlg_gain)},volume=0:enable='not({en})'[dlg]")
             dlg = "[dlg]"
         else:
-            parts.append("[sfx_all]anull[sfx]")
+            parts.append(f"[0:a]volume={db(sfx.get('gain_db', -12))}[sfx]")
         bed.append("[sfx]")
     n = 1
     music = edit.get("music")
@@ -505,9 +505,7 @@ def render_one(edit, style, a):
     work = tempfile.mkdtemp(prefix="assemble_")
     try:
         print("1/5 Chuẩn hóa cảnh…")
-        sfx_gain = float(edit.get("sfx", {}).get("gain_db", -12))
-        boost = float(edit.get("dialogue_gain_db", 0)) - sfx_gain  # cảnh thoại về đúng dialogue_gain_db
-        segs = [normalize_scene(s, i, W, H, fps, work, gain_db=boost if s.get("dialogue") else 0.0)
+        segs = [normalize_scene(s, i, W, H, fps, work)
                 for i, s in enumerate(scenes)]
         print("2/5 Overlay chữ…")
         ass = build_ass(edit, by_id, W, H, aspect, total, work, warnings)
@@ -565,6 +563,7 @@ def render_one(edit, style, a):
 
 
 def main():
+    configure_utf8_console()
     for t in ("ffmpeg", "ffprobe"):
         if not shutil.which(t):
             sys.exit(f"Thiếu {t} trong PATH.")
@@ -583,9 +582,9 @@ def main():
                 raise AdsError(f"không có hook '{a.hook}' trong hook_variants")
         jobs = [apply_hook_variant(edit, v) for v in variants] or [edit]
         for job in jobs:
-            if job.get("hook_variant"):
-                job["output"] = variant_output(edit.get("output", "final.mp4"), job["hook_variant"]["id"])
             e, style = prepare(job)
+            if e.get("hook_variant"):
+                e["output"] = variant_output(e.get("output", "final.mp4"), e["hook_variant"]["id"])
             render_one(e, style, a)
     except AdsError as ex:
         sys.exit(f"Lỗi edit.json: {ex}")

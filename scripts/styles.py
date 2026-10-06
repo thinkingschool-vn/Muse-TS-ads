@@ -14,7 +14,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adslib import DEFAULT_STYLE, AdsError, list_styles, load_style, style_prompt_block  # noqa: E402
+from adslib import (DEFAULT_STYLE, AdsError, configure_utf8_console, list_styles, load_style,  # noqa: E402
+                    style_prompt_block)
 
 
 def describe(s):
@@ -38,6 +39,7 @@ def describe(s):
 
 
 def main():
+    configure_utf8_console()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
