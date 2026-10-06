@@ -20,6 +20,9 @@ Lệnh:
       --ad: thời lượng phải nằm trong [đích − 1,5 ; đích + 0,5]s, cảnh cuối phải là block CTA
       ≥ 3,5s, cảnh đầu nên là HOOK (đọc <video>.timeline.json do assemble.py ghi).
       --must-say: cụm thông tin bắt buộc (giá, ngày…) phải nghe được trong VO và có trong --script.
+      --ad còn kiểm tra HOOK 3 GIÂY (đọc timeline): cắt cảnh đầu ≤ 2,5s, đủ số shot trong 0–5s theo phong cách,
+      khung hình 0 có hình + chuyển động, có chữ trong 0–3s, có tiếng trong 0,5s, thương hiệu trong 5s (WARN).
+      Cảnh có "dialogue" trong timeline: whisper nghe từng cảnh, so với câu thoại (độ khớp ≥ 0,8, không thừa lời).
       QC_NO_WHISPER=1: tắt nhận dạng giọng nói.
 
 Mã thoát: 0 = PASS, 1 = có lỗi FAIL, 2 = lỗi sử dụng.
@@ -55,6 +58,17 @@ CUT_CLEAN = 0.25
 # Khung gần như trơn (YHIGH − YLOW < FLAT_SPREAD, thang 8-bit) — vd frame đầu thẻ thương hiệu đang
 # fade-in (đo được 8–13) so với cảnh phim (≥ 170). SSIM với khung trơn không phân biệt được jump cut.
 FLAT_SPREAD = 24
+
+# Hook 3 giây (spec 2026-10-06-styles-hooks-design.md §6)
+HOOK_FIRST_CUT_MAX = 2.5
+HOOK_SHOT_WINDOW = 5.0
+HOOK_TEXT_BY = 3.0
+HOOK_AUDIO_BY = 0.5
+HOOK_BRAND_BY = 5.0
+BLACK_YAVG = 20       # khung 0 tối hơn mức này = mở bằng màn đen
+STATIC_SSIM = 0.995   # khung 0 và 0,5s gần như y hệt = hình đứng yên
+DIALOGUE_MIN_COVER = 0.8
+DIALOGUE_MAX_RATIO = 1.5
 
 PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 
@@ -122,6 +136,13 @@ def frame_spread(img):
     lo = re.search(r"YLOW=([\d.]+)", p.stderr)
     hi = re.search(r"YHIGH=([\d.]+)", p.stderr)
     return float(hi.group(1)) - float(lo.group(1)) if lo and hi else None
+
+
+def frame_yavg(img):
+    p = run(["ffmpeg", "-hide_banner", "-i", img, "-vf", "scale=360:-2,signalstats,metadata=print",
+             "-f", "null", "-"], check=False)
+    m = re.search(r"YAVG=([\d.]+)", p.stderr)
+    return float(m.group(1)) if m else None
 
 
 def is_flat_pair(img_a, img_b):
@@ -199,6 +220,27 @@ def silences(src, noise_db=-45, min_dur=0.5):
     starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", p.stderr)]
     ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", p.stderr)]
     return [(s, ends[i] if i < len(ends) else None) for i, s in enumerate(starts)]
+
+
+def audio_onset(src, noise_db=-40, window=3.0):
+    """Giây đầu tiên có tiếng (> noise_db) trong `window` giây đầu; = window nếu im lặng suốt."""
+    p = run(["ffmpeg", "-hide_banner", "-t", f"{window}", "-i", src, "-vn", "-af",
+             f"silencedetect=n={noise_db}dB:d=0.05", "-f", "null", "-"], check=False)
+    starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", p.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", p.stderr)]
+    if not starts or starts[0] > 0.01:
+        return 0.0
+    return ends[0] if ends else window
+
+
+def shot_starts(tl, cuts, tol=0.2):
+    """Mốc bắt đầu shot (bỏ 0): ranh giới cảnh trong timeline ∪ cut phát hiện được; gộp mốc gần nhau < tol."""
+    pts = sorted([float(s["start"]) for s in tl.get("scenes", [])[1:]] + [float(c) for c in cuts])
+    out = []
+    for p in pts:
+        if p > tol and (not out or p - out[-1] >= tol):
+            out.append(p)
+    return out
 
 
 def luma_events(src, fps_sample=12, cuts=()):
@@ -292,6 +334,24 @@ def script_coverage(script_lines, segments):
     return results
 
 
+def dialogue_verdict(text, segments):
+    """(status, chi tiết) khi so thoại nghe được với câu thoại trong kịch bản."""
+    target = norm_text(text).split()
+    heard = norm_text(" ".join(t for _, _, t in segments)).split()
+    if len(heard) > DIALOGUE_MAX_RATIO * len(target):
+        return FAIL, f"thừa lời / giọng lạ: nghe {len(heard)} từ, kịch bản {len(target)} từ"
+    cover = script_coverage([text], segments)[0][1] if target else 0.0
+    if cover < DIALOGUE_MIN_COVER:
+        return FAIL, f"{cover:.2f} — thoại sai/thiếu: nghe “{' '.join(heard)[:80]}”"
+    return PASS, f"{cover:.2f} — “{text[:60]}”"
+
+
+def extract_audio(src, t0, t1, out):
+    run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{t0:.3f}", "-t", f"{t1 - t0:.3f}",
+         "-i", src, "-vn", "-ac", "1", "-ar", "16000", out])
+    return out
+
+
 # -------------------------------------------------------------- reporting ---
 class Report:
     def __init__(self, title):
@@ -334,6 +394,62 @@ def check_format(rep, info, aspect, label=""):
     rep.add(PASS if ok_ratio else FAIL, f"{label}Tỷ lệ khung hình",
             f"{info['width']}×{info['height']} (yêu cầu {aspect})")
     return ok_ratio
+
+
+def _num(x, fmt):
+    return format(x, fmt) if x is not None else "?"
+
+
+def hook_checks(rep, tl, cuts, video, out_dir):
+    starts = shot_starts(tl, cuts)
+    first = starts[0] if starts else None
+    rep.add(PASS if first is not None and first <= HOOK_FIRST_CUT_MAX else FAIL, "Hook: cắt cảnh đầu",
+            f"cắt đầu tiên @ {first:.2f}s (cần ≤ {HOOK_FIRST_CUT_MAX}s)" if first is not None
+            else "không có cắt cảnh nào")
+    need = int(tl.get("hook_min_shots", 1))
+    shots = 1 + sum(1 for t in starts if t < HOOK_SHOT_WINDOW)
+    rep.add(PASS if shots >= need else FAIL, "Hook: số shot 0–5s",
+            f"{shots} shot (phong cách {tl.get('style', 'warm-3d')} cần ≥ {need})")
+    fdir = os.path.join(out_dir, "frames")
+    os.makedirs(fdir, exist_ok=True)
+    f0 = extract_frame(video, 0, os.path.join(fdir, "hook_0.jpg"))
+    f1 = extract_frame(video, 0.5, os.path.join(fdir, "hook_05.jpg"))
+    y, sc = frame_yavg(f0), ssim(f0, f1)
+    ok = y is not None and y > BLACK_YAVG and sc is not None and sc < STATIC_SSIM
+    rep.add(PASS if ok else FAIL, "Hook: khung hình đầu",
+            f"độ sáng {_num(y, '.0f')}, SSIM 0→0,5s {_num(sc, '.3f')} "
+            f"(cần sáng > {BLACK_YAVG} và có chuyển động: SSIM < {STATIC_SSIM})")
+    ov = [o for o in tl.get("overlays", []) if o["start"] < HOOK_TEXT_BY]
+    rep.add(PASS if ov else FAIL, "Hook: chữ 0–3s",
+            f"“{ov[0]['text'][:40]}” @ {ov[0]['start']:.2f}s" if ov else "không có overlay chữ trong 3s đầu")
+    on = audio_onset(video)
+    rep.add(PASS if on <= HOOK_AUDIO_BY else FAIL, "Hook: âm thanh mở đầu",
+            f"tiếng bắt đầu @ {on:.2f}s (cần ≤ {HOOK_AUDIO_BY}s)")
+    brand = (tl.get("brand_name") or "").strip()
+    logo = any(iv[0] < HOOK_BRAND_BY for iv in tl.get("logo_bug") or [])
+    said = bool(brand) and any(norm_text(brand) in norm_text(x.get("text") or "")
+                               for x in tl.get("lines", []) if x["start"] < HOOK_BRAND_BY)
+    rep.add(PASS if logo or said else WARN, "Hook: thương hiệu 5s",
+            "logo góc hiện trước 5s" if logo else (f"nhắc “{brand}” trước 5s" if said else
+                                                   "chưa thấy logo/tên thương hiệu trong 5s đầu — bật logo_bug "
+                                                   "hoặc nhắc tên trong VO/thoại"))
+
+
+def dialogue_checks(rep, tl, video, out_dir):
+    scenes = [s for s in tl.get("scenes", []) if s.get("dialogue")]
+    if not scenes:
+        return
+    if os.environ.get("QC_NO_WHISPER"):
+        rep.add(WARN, "Thoại nhân vật", "QC_NO_WHISPER → nghe thủ công từng cảnh thoại")
+        return
+    for s in scenes:
+        wav = extract_audio(video, s["start"], s["end"], os.path.join(out_dir, f"dlg_{s['id']}.wav"))
+        segs = transcribe(wav)
+        if segs is None:
+            rep.add(WARN, "Thoại nhân vật", "chưa cài faster-whisper → nghe thủ công từng cảnh thoại")
+            return
+        st, why = dialogue_verdict(s["dialogue"], segs)
+        rep.add(st, f"Thoại cảnh {s['id']}", why + ("" if st == PASS else " → render lại clip này"))
 
 
 # --------------------------------------------------------------- commands ---
@@ -402,6 +518,7 @@ def cmd_final(a):
     else:
         rep.add(PASS, "Thời lượng", f"{info['duration']:.2f}s")
 
+    tl = None
     tl_path = os.path.splitext(a.video)[0] + ".timeline.json"
     if os.path.exists(tl_path):
         with open(tl_path, encoding="utf-8") as f:
@@ -465,6 +582,11 @@ def cmd_final(a):
         rep.images.append(("Mối nối (trái = trước cut, phải = sau cut)", img))
     if not cuts:
         rep.add(PASS, "Mối nối", "không phát hiện cut cứng (dùng chuyển cảnh mềm)")
+
+    if tl is not None:
+        if a.ad:
+            hook_checks(rep, tl, cuts, a.video, a.out)
+        dialogue_checks(rep, tl, a.video, a.out)
 
     lines = []
     if a.script:

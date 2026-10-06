@@ -143,6 +143,16 @@ def resolve_time(item, scenes_by_id, label):
     raise SystemExit(f"{label}: cần 'at' hoặc 'scene'+'offset'")
 
 
+def overlay_spans(edit, by_id):
+    """[{start, end, text}] của overlay chữ — ghi vào timeline cho QC hook."""
+    out = []
+    for i, o in enumerate(edit.get("overlays", [])):
+        t0 = resolve_time(o, by_id, f"overlay #{i+1}")
+        t1 = t0 + float(o["duration"]) if "duration" in o else float(o["end"])
+        out.append({"start": round(t0, 3), "end": round(t1, 3), "text": o["text"]})
+    return out
+
+
 # ------------------------------------------------------------- step 1: seg ---
 def scene_vf(W, H, fps, punch=1.0):
     vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
@@ -526,6 +536,9 @@ def render_one(edit, style, a):
                                     dialogue=(s["dialogue"] or {}).get("text")) for s in scenes],
                     "vo": [{"file": f, "start": round(s0, 3), "end": round(s1, 3)} for s0, s1, f in spans],
                     "lines": [{"start": round(t, 3), "text": txt} for t, txt in lines],
+                    "brand_name": (edit.get("_brand") or {}).get("name"),
+                    "overlays": overlay_spans(edit, by_id),
+                    "logo_bug": [list(iv) for iv in (logo or {}).get("intervals", [])],
                     "warnings": warnings}
         with open(os.path.splitext(out)[0] + ".timeline.json", "w", encoding="utf-8") as f:
             json.dump(timeline, f, ensure_ascii=False, indent=2)
