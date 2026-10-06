@@ -1,0 +1,17 @@
+{
+  "id": "micro-drama",
+  "name": "Micro-drama / sitcom văn phòng",
+  "use_when": "Khoá kỹ năng ngắn (microlearning), kỹ năng văn phòng, giao tiếp — tình huống đời thường, lật kèo",
+  "look": "Stylized 3D feature-animation characters with expressive faces in a bright photoreal modern office or apartment, natural soft daylight, clean contemporary set dressing, slightly saturated sitcom color palette, medium depth of field",
+  "camera_allowed": ["static locked-off shot with subject motion", "slow push-in on a reaction", "over-the-shoulder medium shot", "medium two-shot", "gentle handheld"],
+  "camera_forbidden": ["whip pan", "crash zoom", "more than one camera move per clip", "close-up of hands typing", "readable screens", "crowds"],
+  "shot_len": [1.0, 3.0],
+  "hook_min_shots": 2,
+  "hook_types": ["in-medias-res", "pov-pain", "why-question"],
+  "transitions": ["cut", "fade", "whip", "zoompunch", "flash"],
+  "grade_arc": "Trước: hơi xám, ánh đèn huỳnh quang · Sau: sáng, ấm, tươi",
+  "music_brief": "Nhạc sitcom nhẹ, nhịp nhanh; stinger khựng/hài ở điểm lật kèo",
+  "vo_brief": "Ít VO; ưu tiên thoại nhân vật tự nhiên, câu ngắn, giọng đời thường",
+  "dialogue": true,
+  "humans": "stylized"
+}

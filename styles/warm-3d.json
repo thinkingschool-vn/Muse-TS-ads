@@ -1,0 +1,17 @@
+{
+  "id": "warm-3d",
+  "name": "Hoạt hình 3D ấm",
+  "use_when": "Mặc định; chương trình cộng đồng, Thinking Uni, khoá cho người mới — thân thiện, truyền cảm hứng",
+  "look": "Stylized 3D feature-animation look, soft rounded shapes, gentle subsurface skin, warm cinematic lighting, rich painterly backgrounds",
+  "camera_allowed": ["static locked-off shot with subject motion", "slow push-in", "gentle orbit", "slow pan"],
+  "camera_forbidden": ["whip pan", "crash zoom", "more than one camera move per clip", "readable screens"],
+  "shot_len": [3.0, 10.0],
+  "hook_min_shots": 1,
+  "hook_types": ["pattern-interrupt", "curiosity-gap", "why-question"],
+  "transitions": ["cut", "fade", "fadewhite", "fadeblack", "dissolve", "slideup", "slideleft"],
+  "grade_arc": "Ấm xuyên suốt, sáng dần về cuối",
+  "music_brief": "Nhạc ấm, truyền cảm hứng, 1 bài liền mạch",
+  "vo_brief": "Giọng ấm, rõ, tốc độ vừa",
+  "dialogue": false,
+  "humans": "stylized"
+}

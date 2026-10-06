@@ -3,6 +3,7 @@
 - ASPECTS / SAFE: khung hình + vùng an toàn (assemble.py, brand_cards.py, qc.py dùng chung)
 - BLOCKS / CUT_PLANS: nhãn block kịch bản quảng cáo + kế hoạch cắt bản 30s/15s
 - load_brand(): đọc brand/brand.json, đổi đường dẫn thành tuyệt đối, kiểm tra file tồn tại
+- load_style() / style_prompt_block(): phong cách video (styles/*.json)
 """
 from __future__ import annotations
 
@@ -158,3 +159,63 @@ def output_name(master_output, version):
     root, ext = os.path.splitext(master_output)
     root = re.sub(r"-\d+s$", "", root)
     return f"{root}-{version}s{ext or '.mp4'}"
+
+
+# ------------------------------------------------------------------ styles ---
+STYLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "styles")
+DEFAULT_STYLE = "warm-3d"
+HOOK_TYPES = ["in-medias-res", "cold-open", "pattern-interrupt", "why-question", "bold-claim", "stop-doing",
+              "pov-pain", "curiosity-gap", "before-after", "direct-address", "callout", "stat-shock"]
+STYLE_FIELDS = {"id": str, "name": str, "use_when": str, "look": str, "camera_allowed": list,
+                "camera_forbidden": list, "shot_len": list, "hook_min_shots": int, "hook_types": list,
+                "transitions": list, "grade_arc": str, "music_brief": str, "vo_brief": str,
+                "dialogue": bool, "humans": str}
+
+
+def list_styles(styles_dir=None):
+    d = styles_dir or STYLES_DIR
+    return sorted(os.path.splitext(n)[0] for n in os.listdir(d) if n.endswith(".json"))
+
+
+def load_style(style_id=None, styles_dir=None):
+    """Đọc + kiểm tra styles/<id>.json. style_id None → phong cách mặc định (warm-3d)."""
+    sid = style_id or DEFAULT_STYLE
+    d = styles_dir or STYLES_DIR
+    path = os.path.join(d, f"{sid}.json")
+    if not os.path.exists(path):
+        raise AdsError(f"không có phong cách '{sid}' — dùng một trong: {', '.join(list_styles(d))}")
+    with open(path, encoding="utf-8-sig") as f:
+        s = json.load(f)
+    for k, typ in STYLE_FIELDS.items():
+        if k not in s:
+            raise AdsError(f"phong cách {sid}: thiếu trường '{k}'")
+        v = s[k]
+        if (typ is int and isinstance(v, bool)) or not isinstance(v, typ):
+            raise AdsError(f"phong cách {sid}: trường '{k}' sai kiểu (cần {typ.__name__})")
+    if s["id"] != sid:
+        raise AdsError(f"phong cách {sid}: 'id' trong file là '{s['id']}' — phải trùng tên file")
+    if s["humans"] != "stylized":
+        raise AdsError(f"phong cách {sid}: 'humans' phải là \"stylized\" (không dùng người photoreal)")
+    if s["hook_min_shots"] < 1:
+        raise AdsError(f"phong cách {sid}: 'hook_min_shots' phải ≥ 1")
+    lo_hi = s["shot_len"]
+    if len(lo_hi) != 2 or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in lo_hi) \
+            or not 0 < lo_hi[0] <= lo_hi[1]:
+        raise AdsError(f"phong cách {sid}: 'shot_len' phải là [min, max] giây, 0 < min ≤ max")
+    bad = [h for h in s["hook_types"] if h not in HOOK_TYPES]
+    if bad:
+        raise AdsError(f"phong cách {sid}: loại hook không có trong thư viện: {', '.join(map(str, bad))}")
+    if "cut" not in s["transitions"]:
+        raise AdsError(f"phong cách {sid}: 'transitions' phải có 'cut'")
+    return s
+
+
+def style_prompt_block(style):
+    """Khối tiếng Anh dán vào ĐẦU mỗi prompt clip (sau GLOBAL LOCKS)."""
+    return "\n".join([
+        f"STYLE: {style['look']}.",
+        "CAMERA ALLOWED (pick exactly one per clip): " + "; ".join(style["camera_allowed"]) + ".",
+        "CAMERA FORBIDDEN: " + "; ".join(style["camera_forbidden"]) + ".",
+        "HUMANS: stylized 3D characters, never photoreal humans.",
+    ])
+

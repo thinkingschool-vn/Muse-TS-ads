@@ -1,0 +1,17 @@
+{
+  "id": "cinematic-drama",
+  "name": "Drama điện ảnh",
+  "use_when": "Mini MBA, chương trình chuyên sâu, hội thảo, câu chuyện chuyển mình của học viên — cần cảm xúc mạnh",
+  "look": "Cinematic stylized 3D feature-animation characters in a photoreal environment, anamorphic 35mm lens feel, shallow depth of field, chiaroscuro key light with soft rim light, practical lights in frame, subtle film grain, teal-and-amber color grade",
+  "camera_allowed": ["static locked-off shot with subject motion", "slow dolly-in (push-in)", "slow dolly-out", "slow lateral tracking", "slow orbit around the subject", "low-angle hero shot", "gentle handheld"],
+  "camera_forbidden": ["whip pan", "crash zoom", "more than one camera move per clip", "close-up of hands typing", "readable screens", "crowds"],
+  "shot_len": [1.5, 4.0],
+  "hook_min_shots": 2,
+  "hook_types": ["in-medias-res", "cold-open", "pattern-interrupt"],
+  "transitions": ["cut", "fade", "whip", "flash", "zoompunch"],
+  "grade_arc": "Trước: lạnh, xanh lam, tương phản gắt · Sau: ấm, vàng hổ phách, mềm",
+  "music_brief": "Nhạc điện ảnh trầm, dồn dần; drone/nhịp tim ở hook; bùng lên ở khoảnh khắc lật ngược",
+  "vo_brief": "Giọng trầm, chậm, có khoảng nghỉ; thoại nhân vật ngắn, đời thường",
+  "dialogue": true,
+  "humans": "stylized"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "motion-graphics",
+  "name": "Motion-graphics nhịp nhanh",
+  "use_when": "Ưu đãi, flash sale, seminar, khoá nhiều lợi ích cần liệt kê — nhịp nhanh, thông tin dày",
+  "look": "Clean stylized 3D motion-design look, simple geometric shapes and props, bold flat blue and violet color fields, soft studio lighting, crisp shadows, playful bouncy motion",
+  "camera_allowed": ["static locked-off shot with object motion", "slow push-in", "slow orbit around an object"],
+  "camera_forbidden": ["whip pan", "crash zoom", "more than one camera move per clip", "readable screens", "text or numbers on objects"],
+  "shot_len": [0.8, 2.5],
+  "hook_min_shots": 3,
+  "hook_types": ["pattern-interrupt", "stat-shock", "stop-doing"],
+  "transitions": ["cut", "fade", "whip", "zoompunch", "flash", "slideup"],
+  "grade_arc": "Sáng, bão hoà, màu thương hiệu xuyên suốt",
+  "music_brief": "Điện tử/pop 110–128 BPM, có hit trùng điểm cắt",
+  "vo_brief": "Giọng nhanh, năng lượng, câu cực ngắn",
+  "dialogue": false,
+  "humans": "stylized"
+}
