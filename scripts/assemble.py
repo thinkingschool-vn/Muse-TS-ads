@@ -7,7 +7,7 @@ Chỉ cần Python 3.8+ và ffmpeg/ffprobe (có libass) trong PATH.
   assemble.py edit.json --plan     # chỉ in timeline (mốc bắt đầu từng cảnh), không render
 
 Pipeline:
-  1. Chuẩn hóa từng cảnh: cắt in/out, scale+crop về 720×1280 (9:16) hoặc 1280×720 (16:9), fps cố định.
+  1. Chuẩn hóa từng cảnh: cắt in/out, scale+crop về 720×1280 (9:16), 1280×720 (16:9) hoặc 720×720 (1:1), fps cố định.
   2. Nối cảnh: "cut" (cắt thẳng) hoặc chuyển cảnh xfade (fade, fadewhite, dissolve, slideup...).
      Tiếng gốc của clip (SFX) được crossfade theo đúng chuyển cảnh.
   3. Chữ overlay: sinh file ASS (font hỗ trợ tiếng Việt, viền, hiệu ứng fade/pop, vùng an toàn).
@@ -18,6 +18,13 @@ Pipeline:
 Mốc thời gian của VO/overlay có thể ghi tuyệt đối ("at": 12.3) hoặc tương đối theo cảnh
 ("scene": "c3", "offset": 0.4) — script tự tính theo timeline sau khi trừ chuyển cảnh.
 Xem templates/edit.example.json.
+
+Mở rộng cho quảng cáo Thinking School (Muse-TS-ads):
+  "brand": "../brand/brand.json"   → font + màu style lấy từ brand kit
+  "version": "60"                  → lọc item có "versions", áp "trim" của bản; ghi vào timeline
+  scene "block": "HOOK" …          → nhãn block (bắt buộc cho MỌI cảnh nếu có dùng)
+  "logo_bug": {"logo": "on_dark", "corner": "tr"} → logo góc, ẩn ở block THƯƠNG HIỆU/ƯU ĐÃI/CTA
+  vo "text": "…"                   → ghi <output>.vo.txt để qc.py --script
 """
 from __future__ import annotations
 
@@ -30,13 +37,11 @@ import subprocess
 import sys
 import tempfile
 
-ASPECTS = {"9:16": (720, 1280), "16:9": (1280, 720)}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from adslib import ASPECTS, SAFE, AdsError, filter_version, load_brand, norm_block  # noqa: E402
 
-# Vùng an toàn (tỷ lệ theo chiều cao/chiều rộng) — tránh UI TikTok/Reels/Shorts che chữ.
-SAFE = {
-    "9:16": {"top": 0.14, "bottom": 0.24, "left": 0.08, "right": 0.14},
-    "16:9": {"top": 0.08, "bottom": 0.12, "left": 0.06, "right": 0.06},
-}
+# ASPECTS (9:16, 16:9, 1:1) và SAFE (vùng an toàn) định nghĩa ở adslib.py, dùng chung với brand_cards/qc.
+LOGO_SKIP_DEFAULT = ["THƯƠNG HIỆU", "ƯU ĐÃI", "CTA"]  # thẻ thương hiệu đã có logo to → ẩn logo góc
 
 
 # ----------------------------------------------------------------- helpers ---
@@ -110,11 +115,14 @@ def build_timeline(edit, base):
             start -= scenes[-1]["trans"]["duration"]
         sc = {"id": s.get("id", f"s{i+1}"), "path": path, "in": t_in, "dur": dur,
               "start": round(start, 3), "end": round(start + dur, 3), "trans": trans_of(s),
-              "has_audio": info["has_audio"]}
+              "has_audio": info["has_audio"], "block": norm_block(s["block"]) if s.get("block") else None}
         if i < len(edit["scenes"]) - 1 and sc["trans"]["duration"] >= dur:
             raise SystemExit(f"Cảnh {sc['id']}: chuyển cảnh dài hơn cảnh")
         scenes.append(sc)
         start += dur
+    tagged = [s["block"] for s in scenes]
+    if any(tagged) and not all(tagged):
+        raise SystemExit("Có cảnh gắn 'block', có cảnh không — quảng cáo cần gắn block cho MỌI cảnh")
     return scenes, round(start, 3)
 
 
@@ -162,7 +170,7 @@ def build_ass(edit, scenes_by_id, W, H, aspect, total, work, warnings):
         return None
     font = edit.get("font", {})
     font_name = font.get("name", "Be Vietnam Pro")
-    k = H / 1280 if aspect == "9:16" else H / 720
+    k = H / 1280 if aspect == "9:16" else (W / 720 if aspect == "1:1" else H / 720)
     safe = SAFE[aspect]
     mL, mR = int(W * safe["left"]), int(W * safe["right"])
     mTop, mBot = int(H * safe["top"]), int(H * safe["bottom"])
@@ -224,7 +232,50 @@ def build_ass(edit, scenes_by_id, W, H, aspect, total, work, warnings):
     return "overlays.ass"
 
 
-def render_video(segs, scenes, ass_file, total, work):
+def logo_intervals(scenes, skip):
+    """Khoảng thời gian hiện logo góc: mọi cảnh trừ block trong `skip`; gộp các khoảng liền nhau."""
+    skip = {norm_block(b) for b in skip}
+    out = []
+    for s in scenes:
+        if s.get("block") in skip:
+            continue
+        a, b = s["start"], s["end"]
+        if out and a <= out[-1][1] + 1e-6:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return [(round(a, 3), round(b, 3)) for a, b in out]
+
+
+def logo_spec(edit, scenes, W, H, aspect):
+    lb = edit.get("logo_bug")
+    if not lb:
+        return None
+    if lb.get("file"):
+        path = os.path.join(edit["_base"], lb["file"])
+    else:
+        path = ((edit.get("_brand") or {}).get("logo") or {}).get(lb.get("logo", "on_dark"))
+        if not path:
+            raise SystemExit("logo_bug cần 'file' hoặc khai báo 'brand' trong edit.json")
+    if not os.path.exists(path):
+        raise SystemExit(f"Không thấy logo: {path}")
+    corner = lb.get("corner", "tr")
+    if corner not in ("tl", "tr", "bl", "br"):
+        raise SystemExit("logo_bug.corner phải là tl / tr / bl / br")
+    safe = SAFE[aspect]
+    mL, mR = int(W * safe["left"]), int(W * safe["right"])
+    mT, mB = int(H * safe["top"]), int(H * safe["bottom"])
+    iv = logo_intervals(scenes, lb.get("skip_blocks", LOGO_SKIP_DEFAULT))
+    if not iv:
+        return None
+    return {"path": path, "w": int(W * float(lb.get("width", 0.16))),
+            "opacity": float(lb.get("opacity", 0.85)),
+            "x": str(mL) if corner[1] == "l" else f"main_w-overlay_w-{mR}",
+            "y": str(mT) if corner[0] == "t" else f"main_h-overlay_h-{mB}",
+            "intervals": iv}
+
+
+def render_video(segs, scenes, ass_file, total, work, logo=None):
     inputs, parts = [], []
     for i, s in enumerate(segs):
         inputs += ["-i", s]
@@ -245,6 +296,13 @@ def render_video(segs, scenes, ass_file, total, work):
             parts.append(f"[{cur_a}][a{i}]acrossfade=d={d:.3f}:c1=tri:c2=tri[{na}]")
             length += scenes[i]["dur"] - d
         cur_v, cur_a = nv, na
+    if logo:
+        n = len(segs)
+        inputs += ["-loop", "1", "-i", logo["path"]]
+        en = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in logo["intervals"])
+        parts.append(f"[{n}:v]scale={logo['w']}:-1,format=rgba,colorchannelmixer=aa={logo['opacity']:.2f}[lg]")
+        parts.append(f"[{cur_v}][lg]overlay=x={logo['x']}:y={logo['y']}:enable='{en}':shortest=1[vlg]")
+        cur_v = "vlg"
     if ass_file:
         parts.append(f"[{cur_v}]ass={ass_file}:fontsdir=fonts[vout]")
         cur_v = "vout"
@@ -368,6 +426,19 @@ def main():
         edit = json.load(f)
     base = os.path.dirname(os.path.abspath(a.edit))
     edit["_base"] = base
+    try:
+        if edit.get("brand"):
+            brand = load_brand(os.path.join(base, edit["brand"]))
+            edit.setdefault("font", {"name": brand["font"]["name"], "file": brand["font"]["file"]})
+            styles = {k: dict(v) for k, v in brand.get("styles", {}).items()}
+            for k, v in edit.get("styles", {}).items():
+                styles.setdefault(k, {}).update(v)
+            edit["styles"] = styles
+            edit["_brand"] = brand
+        if edit.get("version") is not None:
+            edit = filter_version(edit, edit["version"])
+    except AdsError as e:
+        sys.exit(f"Lỗi edit.json: {e}")
     aspect = edit.get("aspect", "9:16")
     if aspect not in ASPECTS:
         sys.exit(f"aspect phải là một trong {list(ASPECTS)}")
@@ -375,13 +446,17 @@ def main():
     fps = int(edit.get("fps", 24))
     L = {"I": -14.0, "TP": -1.5, "LRA": 11.0, **edit.get("loudness", {})}
 
-    scenes, total = build_timeline(edit, base)
+    try:
+        scenes, total = build_timeline(edit, base)
+    except AdsError as e:
+        sys.exit(f"Lỗi edit.json: {e}")
     by_id = {s["id"]: s for s in scenes}
     print(f"TIMELINE ({aspect}, {W}×{H}, {fps}fps) — tổng {total:.2f}s")
     for s in scenes:
         tr = s["trans"]
         tr_s = "" if tr["type"] == "cut" else f"  → {tr['type']} {tr['duration']:.2f}s"
-        print(f"  {s['id']:<8} {s['start']:7.2f} → {s['end']:7.2f}  ({s['dur']:.2f}s){tr_s}")
+        blk = f"  [{s['block']}]" if s["block"] else ""
+        print(f"  {s['id']:<8} {s['start']:7.2f} → {s['end']:7.2f}  ({s['dur']:.2f}s){tr_s}{blk}")
     if a.plan:
         return
 
@@ -393,7 +468,7 @@ def main():
         print("2/5 Overlay chữ…")
         ass = build_ass(edit, by_id, W, H, aspect, total, work, warnings)
         print("3/5 Nối cảnh + chuyển cảnh…")
-        joined = render_video(segs, scenes, ass, total, work)
+        joined = render_video(segs, scenes, ass, total, work, logo_spec(edit, scenes, W, H, aspect))
         print("4/5 Mix âm thanh 3 lớp + ducking…")
         mix, spans = render_mix(edit, by_id, joined, total, work, warnings)
         print("5/5 Chuẩn hóa loudness + xuất file…")
@@ -407,17 +482,27 @@ def main():
         run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", joined, "-i", mix,
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-af", ln, "-c:a", "aac", "-b:a", "192k",
              "-ar", "48000", "-t", f"{total:.3f}", "-movflags", "+faststart", out])
-        timeline = {"aspect": aspect, "fps": fps, "total": total,
-                    "scenes": [{k: s[k] for k in ("id", "start", "end", "dur")} for s in scenes],
+        timeline = {"aspect": aspect, "fps": fps, "total": total, "version": edit.get("version"),
+                    "scenes": [{k: s[k] for k in ("id", "start", "end", "dur", "block")} for s in scenes],
                     "vo": [{"file": f, "start": round(s0, 3), "end": round(s1, 3)} for s0, s1, f in spans],
                     "warnings": warnings}
         with open(os.path.splitext(out)[0] + ".timeline.json", "w", encoding="utf-8") as f:
             json.dump(timeline, f, ensure_ascii=False, indent=2)
+        vo_texts = [v["text"] for v in edit.get("vo", []) if v.get("text")]
+        script_path = None
+        if vo_texts:
+            script_path = os.path.splitext(out)[0] + ".vo.txt"
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(vo_texts) + "\n")
         print(f"\n✔ Xuất xong: {out}")
         for w in warnings:
             print(f"  ⚠ {w}")
-        print("→ Bước tiếp theo bắt buộc: python scripts/qc.py final", os.path.basename(out),
-              f"--aspect {aspect} --script vo_lines.txt")
+        cmd = f"python scripts/qc.py final {os.path.basename(out)} --aspect {aspect}"
+        if edit.get("version"):
+            cmd += f" --duration {edit['version']} --ad"
+        if script_path:
+            cmd += f" --script {os.path.basename(script_path)}"
+        print("→ Bước tiếp theo bắt buộc:", cmd)
     finally:
         if a.keep_work:
             print(f"(thư mục tạm: {work})")
