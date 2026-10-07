@@ -57,4 +57,4 @@ Mỗi dòng kịch bản thuộc đúng 1 block: `HOOK · VẤN ĐỀ · THƯƠN
 - Tối đa 3 thông điệp. Tuân thủ `brand/BRAND_GUIDE.md`.
 
 ## 5. Duyệt
-Gửi user `SCRIPT.md` + bảng ước tính thời lượng 3 bản. Duyệt xong mới sang Giai đoạn 2.
+Gửi user `SCRIPT.md` + bảng ước tính thời lượng 3 bản kèm phương án đề xuất tối ưu. Thông báo mốc chờ 5 phút: *"Trong 5 phút nếu anh không có phản hồi hoặc chỉnh sửa, em sẽ tự động duyệt kịch bản này để sang Giai đoạn 2 (thiết kế nhân vật) nhé ạ!"* Hết 5 phút tự động tiến hành.

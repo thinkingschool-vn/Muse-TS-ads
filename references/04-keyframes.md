@@ -36,3 +36,8 @@ Vẽ trước các "cột mốc" hình ảnh: first frame và last frame của t
 - Cảnh có overlay: yêu cầu "leave clean empty space in the upper third" (9:16) hoặc "in the left third" (16:9).
 - 1:1: nếu công cụ không sinh khung vuông, vẽ 16:9 với chủ thể ở chính giữa, chừa ~22% mỗi bên (assemble.py crop giữa về 1:1).
 - Cảnh ngay trước end card kết thúc tĩnh/nhẹ để cắt sang thẻ không giật.
+
+## Duyệt & Tự động làm tiếp
+Sau khi sinh và kiểm tra keyframes, gửi user 4 ảnh đại diện + tóm tắt kiểu nối giữa các cảnh kèm thông báo mốc chờ 5 phút:
+> *"Em gửi anh 4 ảnh đại diện keyframe và kiểu nối giữa các cảnh. Trong vòng 5 phút nếu anh bận hoặc chưa kịp phản hồi, em sẽ tự động duyệt phương án này để sang giai đoạn 5–6: viết mega prompt và sinh các clip video nhé ạ!"*
+Hết 5 phút tự động tiến hành giai đoạn tiếp theo (hoặc kích hoạt schedule 300s).

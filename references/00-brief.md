@@ -36,5 +36,5 @@ Cuối BRIEF liệt kê `must_say`: cụm bắt buộc phải **nghe được** 
 (vd "mười một tháng mười", "một triệu hai trăm nghìn đồng"). Giai đoạn 9 truyền từng cụm vào `qc.py final --must-say`.
 
 ## 5. Duyệt
-Gửi user BRIEF (bảng) + danh sách câu hỏi ⚠. Chỉ sang Giai đoạn 1 khi user duyệt.
+Gửi user BRIEF (bảng) + danh sách câu hỏi ⚠ kèm gợi ý/đề xuất tối ưu. Thông báo mốc chờ 5 phút: *"Trong 5 phút nếu anh không có phản hồi hoặc chỉnh sửa, em sẽ tự động chốt BRIEF theo đề xuất này để bắt đầu viết kịch bản nhé ạ!"* Nếu hết 5 phút user không phản hồi thì tự động chốt theo đề xuất và sang Giai đoạn 1.
 Thông tin thay đổi về sau → sửa BRIEF trước, rồi mới sửa kịch bản/thẻ.

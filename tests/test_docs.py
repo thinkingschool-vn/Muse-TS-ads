@@ -49,6 +49,12 @@ def test_docs_mention_new_tools():
         assert needle in s, needle
 
 
+def test_auto_approval_protocol_documented():
+    s = read("SKILL.md")
+    assert "Cơ chế Chốt duyệt Tự động 5 Phút" in s
+    assert "schedule(DurationSeconds=300" in s
+
+
 def test_edit_example_uses_style_variants_and_dialogue():
     from adslib import apply_hook_variant, check_dialogue, check_style_use, load_style, validate_hook_variants
     with open(os.path.join(ROOT, "templates", "edit.example.json"), encoding="utf-8-sig") as f:
